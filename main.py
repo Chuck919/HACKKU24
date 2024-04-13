@@ -17,13 +17,15 @@ app.config['MAIL_USE_SSL'] = False
 # Initialize Flask-Mail
 mail = Mail(app)
 
-def send_email(email, keyword, articles):
+def send_email(email, articles):
     
-    msg = Message('News Update: {}'.format(keyword),
+    msg = Message('AnyNews Daily Update',
                   sender=app.config['MAIL_USERNAME'],
                   recipients=[email])
+    
+    print(articles)
 
-    email_body = render_template('daily_mail.html', keyword=keyword, articles=articles)
+    email_body = render_template('daily_mail.html', articles=articles)
     msg.html = email_body
 
     mail.send(msg)
@@ -80,20 +82,37 @@ if __name__ == '__main__':
                 email = user['email']
                 keywords_text = user['text'].strip()  # Remove leading and trailing white spaces
                 
-                if keywords_text:
-                    keywords = [keyword.strip() for keyword in keywords_text.split(',')]  # Split by comma and remove white spaces
-                    
-                    articles_for_user = []
+                if keywords_text and not keywords_text.isspace():  # Check if the keyword contains only spaces, tabs, or white spaces
+                    keywords = [keyword.strip() for keyword in keywords_text.split(',') if keyword.strip()]  # Split by comma and remove white spaces
+                    print(keywords)
+                    articles_by_keyword = {}  # Initialize dictionary to store articles by keyword
+                    print(articles_by_keyword)
+
                     for keyword in keywords:
+                        print(f"Keyword: {keyword}")
                         articles = fetch_news(keyword)
                         print(f"Fetching news for user with email: {email} and keyword: {keyword}")
                         print("Number of articles fetched:", len(articles))
                         
-                        articles_for_user.extend(articles)
+                        articles_for_user = []
+                        for article in articles:
+                            article_info = {
+                                'title': article['title'],
+                                'description': article['description'],
+                                'source': article['source'],
+                                'link': article['url']
+                            }
+                            articles_for_user.append(article_info)
+                            
+                            # Print article info
+                            print(articles_for_user)
                         
-                    if articles_for_user:
-                        send_email(email, keywords, articles_for_user)
+                        # Store articles for the current keyword
+                        articles_by_keyword[keyword] = articles_for_user
+                        
+                    if articles_by_keyword:
+                        send_email(email, articles_by_keyword)
                     else:
                         print(f"No articles found for user with email: {email}")
                 else:
-                    print(f"No keywords found for user with email: {email}")
+                    print(f"No valid keywords found for user with email: {email}")

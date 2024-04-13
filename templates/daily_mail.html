@@ -9,19 +9,20 @@
 <body>
     <h1>News Update</h1>
 
-    <h2>Keywords</h2>
-    <ul>
-        {% for keyword in keywords %}
-            <li>{{ keyword }}</li>
-        {% endfor %}
-    </ul>
+    {% for keyword, keyword_articles in articles.items() %}
+        <h2>Keyword: {{ keyword }}</h2>
+        <ul>
+            {% for article in keyword_articles %}
+                <li>
+                    <p><strong>Title:</strong> <span style="font-weight: bold;">{{ article.title }}</span></p>
+                    <p><strong>Description:</strong> {{ article.description }}</p>
+                    <p><strong>Source:</strong> {{ article.source }}</p>
+                    <p><strong>Link:</strong> <a href="{{ article.link }}">{{ article.link }}</a></p>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endfor %}
 
-    <h2>Articles</h2>
-    <ul>
-        {% for article in articles %}
-            <li>{{ article }}</li>
-        {% endfor %}
-    </ul>
     <p>If you no longer wish to receive emails from us, you can <a href="{{ unsubscribe_link }}">unsubscribe</a>.</p>
     <p>To return to our homepage, click <a href="{{ homepage_link }}">here</a>.</p>
 </body>
