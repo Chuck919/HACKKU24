@@ -70,34 +70,37 @@ def submit():
 
 # Define function to send email
 def send_email(email, text):
-    user = User.query.filter_by(email=email).first()
-    if user:
+    # This function is called outside of any route function, so make sure
+    # it's being called within the application context.
+    with app.app_context():
+        user = User.query.filter_by(email=email).first()
+        if user:
+            unsubscribe_link = url_for('unsubscribe', token=user.unsubscribe_token, _external=True)
+            homepage_link = url_for('index', _external=True)
+            print("Unsubscribe link:", unsubscribe_link)  # Debugging statement
+            print("Homepage link:", homepage_link)  # Debugging statement
+        else:
+            unsubscribe_link = ""
+            homepage_link = ""
+            print("User not found or email is empty")  # Debugging statement
+        msg = Message('Thank you for submitting the form!',
+                      sender='***REMOVED***',
+                      recipients=[email])
+
+        # Generate unsubscribe link with token
         unsubscribe_link = url_for('unsubscribe', token=user.unsubscribe_token, _external=True)
         homepage_link = url_for('index', _external=True)
-        print("Unsubscribe link:", unsubscribe_link)  # Debugging statement
-        print("Homepage link:", homepage_link)  # Debugging statement
-    else:
-        unsubscribe_link = ""
-        homepage_link = ""
-        print("User not found or email is empty")  # Debugging statement
-    msg = Message('Thank you for submitting the form!',
-                  sender='***REMOVED***',
-                  recipients=[email])
 
-    # Generate unsubscribe link with token
-    unsubscribe_link = url_for('unsubscribe', token=user.unsubscribe_token, _external=True)
-    homepage_link = url_for('index', _external=True)
+        # Render HTML template with the text from the form submission and unsubscribe link
+        html_content = render_template('email_content.html',
+                                       text=text,
+                                       unsubscribe_link=unsubscribe_link,
+                                       homepage_link=homepage_link)
 
-    # Render HTML template with the text from the form submission and unsubscribe link
-    html_content = render_template('email_content.html',
-                                   text=text,
-                                   unsubscribe_link=unsubscribe_link,
-                                   homepage_link=homepage_link)
+        # Set the email body with HTML content
+        msg.html = html_content
 
-    # Set the email body with HTML content
-    msg.html = html_content
-
-    mail.send(msg)
+        mail.send(msg)
 
 @app.route('/unsubscribe', methods=['GET', 'POST'])
 def unsubscribe():
