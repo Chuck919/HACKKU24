@@ -4,24 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Change Text</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>Change Your Text</h1>
-    <p>Please enter your new text:</p>
+    <div class="container">
+    <h1>Change Your Email Preferences</h1>
+    <p>Please enter your New Topics:</p>
     <form action="/update_info" method="post">
-        <textarea name="text" placeholder="Your New Text" required></textarea>
+        <textarea name="text" placeholder="Make sure to separate topics by a comma" required></textarea>
         <button type="submit">Submit</button>
     </form>
     <a href="/">Return to Home Page</a>
+</div>
+    
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }}">
-                    {{ message }}
-                </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
+    
 </body>
 </html>
