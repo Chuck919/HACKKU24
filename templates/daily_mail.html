@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Update</title>
+</head>
+<body>
+    <h1>News Update</h1>
+
+    <h2>Keywords</h2>
+    <ul>
+        {% for keyword in keywords %}
+            <li>{{ keyword }}</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Articles</h2>
+    <ul>
+        {% for article in articles %}
+            <li>{{ article }}</li>
+        {% endfor %}
+    </ul>
+    <p>If you no longer wish to receive emails from us, you can <a href="{{ unsubscribe_link }}">unsubscribe</a>.</p>
+    <p>To return to our homepage, click <a href="{{ homepage_link }}">here</a>.</p>
+</body>
+</html>
