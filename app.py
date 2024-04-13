@@ -10,6 +10,8 @@ from sqlalchemy.exc import IntegrityError
 
 
 app = Flask(__name__)
+
+app.secret_key = '***REMOVED***' 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 
 app.config['MAIL_SERVER']='smtp.gmail.com'
@@ -41,7 +43,7 @@ class User(db.Model):
 def index():
     return render_template('index.html')
 
-# Define route for form submission
+
 @app.route('/submit', methods=['POST'])
 def submit():
     email = request.form['email']
@@ -49,24 +51,26 @@ def submit():
     
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
-        # Redirect existing users to sameuser.html page
         return redirect(url_for('sameuser'))
+    
+    
+    # Check if text is empty
+    if not text.strip():
+        flash('You do not have an account. Please enter which topics you would like', 'error')
+        return render_template('index.html')  # Redirect to the user form page
 
-    # Create a new user since it doesn't exist
+
     user = User(email=email, text=text)
-    user.unsubscribe_token = secrets.token_urlsafe(16)  # Generate a new token
+    user.unsubscribe_token = secrets.token_urlsafe(16)
     
     try:
-        # Add new user record and commit changes to the database
         db.session.add(user)
         db.session.commit()
     except IntegrityError:
-        # Handle integrity error (email already exists)
         db.session.rollback()
-        # Log the error or perform any necessary actions
     
-    send_email(email, text)  # Pass the text to the send_email function
-    return 'Form submitted successfully!'
+    send_email(email, text)
+    return render_template('success.html')  # Redirect to the user form page
 
 # Define function to send email
 def send_email(email, text):
@@ -111,7 +115,7 @@ def unsubscribe():
         if user:
             db.session.delete(user)
             db.session.commit()
-            return 'You have been unsubscribed successfully.'
+            return render_template('success.html')
         else:
             return 'Invalid unsubscribe token.'
     else:
@@ -122,7 +126,7 @@ def unsubscribe():
             if user:
                 db.session.delete(user)
                 db.session.commit()
-                return 'You have been unsubscribed successfully.'
+                return render_template('success.html')
             else:
                 return 'Invalid email address. Please try again.'
         return render_template('unsub.html')
@@ -140,11 +144,12 @@ def update_info():
         user = User.query.first()  # Assuming there's only one user for this example
         user.text = new_text
         db.session.commit()
-        flash('Update successful!', 'success')  # Flash message for successful update
-        return redirect('/')  # Redirect to the homepage
+        return render_template('success.html')  # Redirect to the homepage
     return render_template('change.html')
 
-
+@app.route('/success')
+def success():
+    return render_template('success.html')
 
 
         

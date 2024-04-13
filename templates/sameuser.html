@@ -4,13 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Email Already Entered</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>Email Already Entered</h1>
-    <p>Your email address has already been submitted.</p>
-    <p>If you want to change your text or unsubscribe, please use the appropriate links.</p>
+    <div class="container">
+    <h1>Welcome Back!</h1>
+    <p>Your email address has already been submitted, but you can change topics or unsubscribe from our emails.</p>
     <a href="{{ url_for('index') }}">Return to Home Page</a>
     <a href="{{ url_for('update_info', email=email) }}">Update Email Preferences</a>
     <a href="{{ url_for('unsubscribe') }}">Unsubscribe to All Emails</a>
+    </div>
 </body>
 </html>

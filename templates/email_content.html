@@ -4,10 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Email Content</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <h1>Thank you for submitting the form!</h1>
-    <p>Your form submission has been received. Here is the text you entered:</p>
+    <p>Your form submission has been received. Here are the topics you entered:</p>
     <p>{{ text }}</p>
     <p>If you no longer wish to receive emails from us, you can <a href="{{ unsubscribe_link }}">unsubscribe</a>.</p>
     <p>To return to our homepage, click <a href="{{ homepage_link }}">here</a>.</p>

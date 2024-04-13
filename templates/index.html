@@ -9,13 +9,28 @@
 </head>
 <body>
     <div class="container">
-        <h1>User Form</h1>
+        <h1>Any News</h1>
+        <p>Get ANY news updates you want, everyday, ALL the time.</p>
+        <h2>New and Returning Users: Enter your email to get started</h2>
+        
+        <!-- Display flashed messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-{{ category }}">
+                        <p>{{ message }}</p>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
         <form action="{{ url_for('submit') }}" method="POST">
             <label for="email">Email:</label>
             <input type="email" id="email" name="email" required>
-            <label for="text">Text:</label>
-            <textarea id="text" name="text" required></textarea>
+            <label for="text">Topics:</label>
+            <textarea id="text" name="text" placeholder="Make sure to separate topics by a comma"></textarea>
             <button type="submit">Submit</button>
+
         </form>
     </div>
 </body>

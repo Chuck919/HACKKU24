@@ -1,37 +1,29 @@
-
+from flask import Flask, render_template
+from flask_mail import Mail, Message
+import sqlite3
 import http.client
 import urllib.parse
 from datetime import datetime
+import json
 
-def date():
-    current_date = datetime.now().date()
-
-    formatted_date = current_date.strftime('%Y-%m-%d')
-
-    return str(formatted_date)
-
-def fetch_news(keyword):
-
-    conn = http.client.HTTPConnection('api.mediastack.com')
-
-    today = date()
-    print(today)
-    params = urllib.parse.urlencode({
-        'access_key': '***REMOVED***', #You will need your own access key
-        'countries': 'us',
-        'languages': 'en',
-        'keywords': keyword,
-        'date': today,
-        'sort': 'published_asc',
-        'limit': 100,
-        })
-
-
-    conn.request('GET', '/v1/news?{}'.format(params))
-
-    res = conn.getresponse()
-    data = res.read()
-
-    print(data.decode('utf-8'))
-    
-fetch_news('Bitcoin')
+def read_from_database():
+    try:
+        conn = sqlite3.connect('instance/users.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM user')
+        rows = cursor.fetchall()
+        user_info = []
+        for row in rows:
+            user_info.append({
+                'email': row[1],
+                'text': row[2],
+                'token': row[3]
+            })
+        cursor.close()
+        conn.close()
+        return user_info
+    except Exception as e:
+        print("Error reading from database:", e)
+        
+        
+print(read_from_database())

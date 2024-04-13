@@ -1,4 +1,5 @@
 /* static/style.css */
+
 body {
     font-family: Arial, sans-serif;
     background-color: #f4f4f4;
@@ -13,7 +14,7 @@ body {
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 
-h1 {
+h1, h2, h3 {
     text-align: center;
 }
 
@@ -44,4 +45,49 @@ button {
 
 button:hover {
     background-color: #0056b3;
+}
+
+p {
+    line-height: 1.6; /* Increase line height for better readability */
+    margin-bottom: 15px; /* Add some space after each paragraph */
+    color: #333; /* Text color */
+}
+
+a {
+    display: block; /* Change display to block-level */
+    padding: 10px 15px; /* Adjust padding as needed */
+    border: 1px solid #007bff; /* Add border */
+    border-radius: 5px; /* Add border-radius for rounded corners */
+    color: #007bff;
+    text-decoration: none;
+    text-align: center; /* Center the link text */
+    margin-bottom: 10px; /* Add separation between links */
+}
+
+a:hover {
+    background-color: #007bff; /* Change background color on hover */
+    color: #fff; /* Change text color on hover */
+}
+
+/* Additional style to make the button square */
+a:active {
+    border-color: #0056b3; /* Change border color on active state */
+}
+
+.message {
+    padding: 10px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+}
+
+.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
 }
