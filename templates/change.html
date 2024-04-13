@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Change Text</title>
+</head>
+<body>
+    <h1>Change Your Text</h1>
+    <p>Please enter your new text:</p>
+    <form action="/update_info" method="post">
+        <textarea name="text" placeholder="Your New Text" required></textarea>
+        <button type="submit">Submit</button>
+    </form>
+    <a href="/">Return to Home Page</a>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+</body>
+</html>
