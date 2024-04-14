@@ -11,16 +11,20 @@
 
     {% for keyword, keyword_articles in articles.items() %}
         <h2 style="color: #007bff;">Topic: {{ keyword }}</h2>
-        <ul>
-            {% for article in keyword_articles %}
-                <li>
-                    <p><span style="font-weight: bold; font-size: larger; color: black;">{{ article.title }}</span></p>
-                    <p style="font-size: smaller; color: #007bff;">Publication: {{ article.source }}</p>
-                    <p style="color: black;">{{ article.description }}</p>
-                    <p><a href="{{ article.link }}">Read More</a></p>
-                </li>
-            {% endfor %}
-        </ul>
+        {% if keyword_articles %}
+            <ul>
+                {% for article in keyword_articles %}
+                    <li>
+                        <p><span style="font-weight: bold; font-size: larger; color: black;">{{ article.title }}</span></p>
+                        <p style="font-size: smaller; color: #007bff;">Publication: {{ article.source }}</p>
+                        <p style="color: black;">{{ article.description }}</p>
+                        <p><a href="{{ article.link }}">Read More</a></p>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p style="color: black;">Sorry! No articles related to this topic today!</p>
+        {% endif %}
     {% endfor %}
 
     <p style="color: black;">If you no longer wish to receive emails from us, you can <a href="https://changwen919.eu.pythonanywhere.com/unsubscribe">unsubscribe</a>.</p>

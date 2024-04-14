@@ -63,7 +63,7 @@ def fetch_news(keyword):
         'languages': 'en',
         'keywords': keyword,
         'date': today,
-        'sort': 'published_asc',
+        'sort': 'published_desc',
         'limit': 3,
     })
     conn.request('GET', '/v1/news?{}'.format(params))
