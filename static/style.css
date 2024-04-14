@@ -24,7 +24,6 @@ textarea,
 button {
     display: block;
     margin-bottom: 10px;
-    width: 100%;
 }
 
 input,
@@ -32,6 +31,7 @@ textarea {
     padding: 10px;
     border: 1px solid #ccc;
     border-radius: 5px;
+    width: calc(100% - 22px); /* Adjust the width here */
 }
 
 button {
