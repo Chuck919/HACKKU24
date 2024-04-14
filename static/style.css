@@ -91,3 +91,10 @@ a:active {
     color: #721c24;
     border: 1px solid #f5c6cb;
 }
+
+/* Add styles for the logo */
+.container img {
+    display: block;
+    margin: 0 auto;
+    max-width: 200px; /* Adjust the maximum width of the logo */
+}
