@@ -69,7 +69,11 @@ def submit():
     except IntegrityError:
         db.session.rollback()
     
-    send_email(email, text)
+    try:
+        send_email(email, text)
+    except:
+        flash('Invalid email. Please try again later.', 'error')
+        return render_template('index.html')  # Redirect to the user form page
     return render_template('success.html')  # Redirect to the user form page
 
 # Define function to send email
