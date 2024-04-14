@@ -51,7 +51,7 @@ def submit():
     
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
-        return redirect(url_for('sameuser'))
+        return redirect(url_for('sameuser', email=email))
     
     
     # Check if text is empty
@@ -117,7 +117,8 @@ def unsubscribe():
             db.session.commit()
             return render_template('success.html')
         else:
-            return 'Invalid unsubscribe token.'
+            flash('Unidentified user. Please try again.', 'error')
+            return render_template('index.html')  
     else:
         # No token provided, prompt user to enter email
         if request.method == 'POST':
@@ -128,20 +129,29 @@ def unsubscribe():
                 db.session.commit()
                 return render_template('success.html')
             else:
-                return 'Invalid email address. Please try again.'
+                flash('Invalid email provided. Please try again.', 'error')
+                return render_template('index.html')  
         return render_template('unsub.html')
 
 # Define route for sameuser page
 @app.route('/sameuser')
 def sameuser():
-    return render_template('sameuser.html')
+    email = request.args.get('email')
+    print(email)
+    return render_template('sameuser.html', email=email)
 
 @app.route('/update_info', methods=['GET', 'POST'])
 def update_info():
+    email = request.form.get('email')
+    text = request.form.get('text')
+
+    print(email)  # For debugging purposes
+    print(text)   # For debugging purposes
+
+    user = User.query.filter_by(email=email).first()
     if request.method == 'POST':
         new_text = request.form.get('text')
         # Update the user's text in the database
-        user = User.query.first()  # Assuming there's only one user for this example
         user.text = new_text
         db.session.commit()
         return render_template('success.html')  # Redirect to the homepage

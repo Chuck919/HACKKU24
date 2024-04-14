@@ -7,17 +7,17 @@
     <title>News Update</title>
 </head>
 <body>
-    <h1>News Update</h1>
+    <h1>AnyNews Daily Update</h1>
 
     {% for keyword, keyword_articles in articles.items() %}
-        <h2>Keyword: {{ keyword }}</h2>
+        <h2>Topic: {{ keyword }}</h2>
         <ul>
             {% for article in keyword_articles %}
                 <li>
-                    <p><strong>Title:</strong> <span style="font-weight: bold;">{{ article.title }}</span></p>
-                    <p><strong>Description:</strong> {{ article.description }}</p>
-                    <p><strong>Source:</strong> {{ article.source }}</p>
-                    <p><strong>Link:</strong> <a href="{{ article.link }}">{{ article.link }}</a></p>
+                    <p><span style="font-weight: bold; font-size: larger; color: #007bff;">{{ article.title }}</span></p>
+                    <p style="font-size: smaller; color: #007bff;">{{ article.source }}</p>
+                    <p style="color: black;">{{ article.description }}</p>
+                    <p><a href="{{ article.link }}">Read More</a></p>
                 </li>
             {% endfor %}
         </ul>
