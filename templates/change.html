@@ -8,16 +8,14 @@
 </head>
 <body>
     <div class="container">
-    <h1>Change Your Email Preferences</h1>
-    <p>Please enter your New Topics:</p>
-    <form action="/update_info" method="post">
-        <textarea name="text" placeholder="Make sure to separate topics by a comma" required></textarea>
-        <button type="submit">Submit</button>
-    </form>
-    <a href="/">Return to Home Page</a>
-</div>
-    
-
-    
+        <h1>Change Your Email Preferences</h1>
+        <form action="{{ url_for('update_info') }}" method="POST">
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" required>
+            <label for="text">Enter New Topics:</label>
+            <textarea id="text" name="text" placeholder="Make sure to separate topics by a comma"></textarea>
+            <button type="submit">Submit</button>
+        <a href="/">Return to Home Page</a>
+    </div>
 </body>
 </html>
