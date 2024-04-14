@@ -74,6 +74,8 @@ def submit():
     except:
         flash('Invalid email. Please try again later.', 'error')
         return render_template('index.html')  # Redirect to the user form page
+    
+
     return render_template('success.html')  # Redirect to the user form page
 
 # Define function to send email
