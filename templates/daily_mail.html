@@ -10,12 +10,12 @@
     <h1>AnyNews Daily Update</h1>
 
     {% for keyword, keyword_articles in articles.items() %}
-        <h2>Topic: {{ keyword }}</h2>
+        <h2 style="color: #007bff;">Topic: {{ keyword }}</h2>
         <ul>
             {% for article in keyword_articles %}
                 <li>
-                    <p><span style="font-weight: bold; font-size: larger; color: #007bff;">{{ article.title }}</span></p>
-                    <p style="font-size: smaller; color: #007bff;">{{ article.source }}</p>
+                    <p><span style="font-weight: bold; font-size: larger; color: black;">{{ article.title }}</span></p>
+                    <p style="font-size: smaller; color: #007bff;">Publication: {{ article.source }}</p>
                     <p style="color: black;">{{ article.description }}</p>
                     <p><a href="{{ article.link }}">Read More</a></p>
                 </li>
@@ -23,7 +23,7 @@
         </ul>
     {% endfor %}
 
-    <p>If you no longer wish to receive emails from us, you can <a href="{{ unsubscribe_link }}">unsubscribe</a>.</p>
-    <p>To return to our homepage, click <a href="{{ homepage_link }}">here</a>.</p>
+    <p style="color: black;">If you no longer wish to receive emails from us, you can <a href="https://changwen919.eu.pythonanywhere.com/unsubscribe">unsubscribe</a>.</p>
+    <p style="color: black;">To return to our homepage, click <a href="https://changwen919.eu.pythonanywhere.com/">here</a>.</p>
 </body>
 </html>
