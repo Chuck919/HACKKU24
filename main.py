@@ -5,14 +5,10 @@ import http.client
 import urllib.parse
 from datetime import datetime
 import json
+from config import Config
 
 app = Flask(__name__)
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USERNAME'] = '***REMOVED***'
-app.config['MAIL_PASSWORD'] = '***REMOVED***'
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USE_SSL'] = False
+app.config.from_object(Config)
 
 # Initialize Flask-Mail
 mail = Mail(app)
@@ -58,7 +54,7 @@ def fetch_news(keyword):
     conn = http.client.HTTPConnection('api.mediastack.com')
     today = date()
     params = urllib.parse.urlencode({
-        'access_key': '***REMOVED***',
+        'access_key': app.config['MEDIASTACK_API_KEY'],
         'countries': 'us',
         'languages': 'en',
         'keywords': keyword,

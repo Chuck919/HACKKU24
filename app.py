@@ -6,20 +6,12 @@ from flask import render_template_string
 from flask import url_for, redirect, flash
 import secrets
 from sqlalchemy.exc import IntegrityError
-
+from config import Config
 
 
 app = Flask(__name__)
 
-app.secret_key = '***REMOVED***' 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
-
-app.config['MAIL_SERVER']='smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USERNAME'] = '***REMOVED***'
-app.config['MAIL_PASSWORD'] = '***REMOVED***'
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USE_SSL'] = False
+app.config.from_object(Config)
 
 # Initialize Flask-Mail
 mail = Mail(app)
@@ -94,7 +86,7 @@ def send_email(email, text):
             homepage_link = ""
             print("User not found or email is empty")  # Debugging statement
         msg = Message('Thank you for submitting the form!',
-                      sender='***REMOVED***',
+                      sender=app.config['MAIL_USERNAME'],
                       recipients=[email])
 
         # Generate unsubscribe link with token
