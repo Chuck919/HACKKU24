@@ -18,6 +18,7 @@ import io
 import base64
 import os
 import time
+import requests
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -27,7 +28,7 @@ mail = Mail(app)
 
 # Top 10 S&P 500 stocks by percentage weight (as of 2025)
 # Sorted by actual S&P 500 index weight, not market cap
-TOP_10_SP500 = ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'META', 'GOOGL', 'TSLA', 'BRK.B', 'LLY', 'AVGO']
+TOP_10_SP500 = ['NVDA', 'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'AVGO', 'GOOG', 'META',  'TSLA', 'BRK.B']
 
 def fetch_insider_transactions(symbols_list):
     """
@@ -52,13 +53,8 @@ def fetch_insider_transactions(symbols_list):
                 'apikey': api_key
             }
             
-            conn = http.client.HTTPSConnection('www.alphavantage.co', timeout=10)
-            query_string = urllib.parse.urlencode(params)
-            conn.request('GET', f'/query?{query_string}')
-            
-            response = conn.getresponse()
-            data = json.loads(response.read().decode('utf-8'))
-            conn.close()
+            response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
+            data = response.json()
             
             if 'data' in data and len(data['data']) > 0:
                 # Get most recent 3 transactions
@@ -108,13 +104,8 @@ def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
         if topics:
             params['topics'] = ','.join(topics)
         
-        conn = http.client.HTTPSConnection('www.alphavantage.co', timeout=10)
-        query_string = urllib.parse.urlencode(params)
-        conn.request('GET', f'/query?{query_string}')
-        
-        response = conn.getresponse()
-        data = json.loads(response.read().decode('utf-8'))
-        conn.close()
+        response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
+        data = response.json()
         
         if 'feed' in data:
             news_items = []
@@ -181,14 +172,9 @@ def fetch_alphavantage_data(symbol, api_key):
                 'apikey': api_key
             }
         
-        # Build request
-        conn = http.client.HTTPSConnection('www.alphavantage.co', timeout=10)
-        query_string = urllib.parse.urlencode(params)
-        conn.request('GET', f'/query?{query_string}')
-        
-        response = conn.getresponse()
-        data = json.loads(response.read().decode('utf-8'))
-        conn.close()
+        # Build request using requests library
+        response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
+        data = response.json()
         
         # Parse response based on function type
         if av_symbol == 'BTC':
@@ -481,24 +467,21 @@ def fetch_top10_sp500_stocks():
     
     for idx, symbol in enumerate(TOP_10_SP500, 1):
         try:
-            # Fetch data from Alpha Vantage
+            # Fetch data from Alpha Vantage using requests library (more reliable on PythonAnywhere)
+            url = 'https://www.alphavantage.co/query'
             params = {
                 'function': 'GLOBAL_QUOTE',
                 'symbol': symbol,
                 'apikey': api_key
             }
             
-            conn = http.client.HTTPSConnection('www.alphavantage.co', timeout=10)
-            query_string = urllib.parse.urlencode(params)
-            conn.request('GET', f'/query?{query_string}')
-            
-            response = conn.getresponse()
-            data = json.loads(response.read().decode('utf-8'))
-            conn.close()
+            response = requests.get(url, params=params, timeout=10)
+            data = response.json()
             
             # Check for rate limit message
             if 'Note' in data or 'Information' in data:
                 print(f"    WARNING: {symbol}: API rate limit reached")
+                print(f"    Message: {data.get('Note') or data.get('Information')}")
                 # Wait and retry once
                 print(f"    Waiting 60 seconds to respect rate limit...")
                 time.sleep(60)
@@ -532,6 +515,9 @@ def fetch_top10_sp500_stocks():
                 print(f"    [{idx}/{len(TOP_10_SP500)}] Waiting {wait_time}s for rate limit...")
                 time.sleep(wait_time)
                 
+        except requests.exceptions.RequestException as e:
+            print(f"    ERROR: {symbol} request failed: {str(e)[:100]}")
+            continue
         except Exception as e:
             print(f"    ERROR: {symbol} failed: {str(e)[:50]}")
             continue

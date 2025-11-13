@@ -19,13 +19,40 @@
             background-color: white;
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
         }
         .chart-image {
             max-width: 100%;
+            width: 100%;
             height: auto;
             margin: 15px 0;
             border-radius: 4px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: block;
+        }
+        
+        /* Mobile optimization */
+        @media only screen and (max-width: 600px) {
+            body {
+                padding: 10px;
+                max-width: 100%;
+            }
+            .chart-section {
+                padding: 10px;
+                margin: 15px 0;
+            }
+            .chart-image {
+                margin: 10px 0;
+                max-width: 100%;
+                width: 100%;
+            }
+            .stocks-table {
+                font-size: 12px;
+            }
+            .stocks-table th,
+            .stocks-table td {
+                padding: 8px 4px;
+            }
         }
         .stocks-table {
             width: 100%;
@@ -33,8 +60,13 @@
             margin: 20px 0;
             background-color: white;
             border-radius: 8px;
-            overflow: hidden;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stocks-table thead {
+            display: table-header-group;
+        }
+        .stocks-table tbody {
+            display: table-row-group;
         }
         .stocks-table th {
             background-color: #007bff;
