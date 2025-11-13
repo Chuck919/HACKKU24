@@ -83,6 +83,9 @@ def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
     Uses condensed API call to get news for multiple tickers/topics
     """
     print(f"  Fetching market news & sentiment...")
+    print(f"    Topics: {topics}")
+    print(f"    Tickers: {tickers}")
+    print(f"    Limit: {limit}")
     
     if not app.config.get('ALPHAVANTAGE_API_KEY'):
         print("    WARNING: No Alpha Vantage API key configured")
@@ -99,15 +102,35 @@ def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
         # Add tickers if provided (comma-separated for batch request)
         if tickers:
             params['tickers'] = ','.join(tickers[:10])  # Limit to 10 tickers
+            print(f"    Added tickers to params: {params['tickers']}")
         
         # Add topics if provided
         if topics:
             params['topics'] = ','.join(topics)
+            print(f"    Added topics to params: {params['topics']}")
         
+        print(f"    Making request to Alpha Vantage NEWS_SENTIMENT API...")
         response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
+        print(f"    Response status code: {response.status_code}")
+        
         data = response.json()
+        print(f"    Response keys: {list(data.keys())}")
+        
+        # Check for errors or rate limiting
+        if 'Error Message' in data:
+            print(f"    ERROR: {data['Error Message']}")
+            return []
+        
+        if 'Note' in data:
+            print(f"    RATE LIMIT: {data['Note']}")
+            return []
+        
+        if 'Information' in data:
+            print(f"    INFO: {data['Information']}")
+            return []
         
         if 'feed' in data:
+            print(f"    Feed contains {len(data['feed'])} items")
             news_items = []
             for item in data['feed'][:limit]:
                 # Get ticker sentiments
@@ -132,11 +155,18 @@ def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
             
             print(f"    SUCCESS: Retrieved {len(news_items)} news articles")
             return news_items
+        else:
+            print(f"    WARNING: No 'feed' key in response")
+            print(f"    Response data: {str(data)[:200]}")
+            return []
         
+    except requests.exceptions.RequestException as e:
+        print(f"    ERROR: Request failed: {str(e)[:100]}")
         return []
-        
     except Exception as e:
-        print(f"    ✗ News fetch failed: {str(e)[:100]}")
+        print(f"    ERROR: News fetch failed: {str(e)[:100]}")
+        import traceback
+        traceback.print_exc()
         return []
 
 def fetch_alphavantage_data(symbol, api_key):
@@ -605,7 +635,11 @@ def send_email(email, articles, charts=None, top10_stocks=None, insider_data=Non
 
 def read_from_database():
     try:
-        conn = sqlite3.connect('instance/users.db')
+        # Use absolute path for database to work with scheduled tasks
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'users.db')
+        print(f"  Attempting to connect to database: {db_path}")
+        
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM user')
         rows = cursor.fetchall()
@@ -636,11 +670,9 @@ def date():
     return str(formatted_date)
 
 def fetch_news(keyword):
-    conn = None
     try:
-        conn = http.client.HTTPConnection('api.mediastack.com', timeout=10)
         today = date()
-        params = urllib.parse.urlencode({
+        params = {
             'access_key': app.config['MEDIASTACK_API_KEY'],
             'countries': 'us',
             'languages': 'en',
@@ -648,13 +680,11 @@ def fetch_news(keyword):
             'date': today,
             'sort': 'published_desc',
             'limit': 3,
-        })
+        }
         
         print(f"Fetching news for keyword: {keyword}")
-        conn.request('GET', '/v1/news?{}'.format(params))
-        res = conn.getresponse()
-        data = res.read()
-        articles = json.loads(data.decode('utf-8'))
+        response = requests.get('http://api.mediastack.com/v1/news', params=params, timeout=10)
+        articles = response.json()
         
         # Check for API errors
         if 'error' in articles:
@@ -662,12 +692,12 @@ def fetch_news(keyword):
             return []
         
         return articles.get('data', [])
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching news for keyword '{keyword}': {e}")
+        return []
     except Exception as e:
         print(f"Error fetching news for keyword '{keyword}': {e}")
         return []
-    finally:
-        if conn:
-            conn.close()
 
 if __name__ == '__main__':
     print("=" * 50)
