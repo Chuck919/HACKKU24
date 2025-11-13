@@ -10,11 +10,109 @@
     <div class="container">
         <h1>Change Your Email Preferences</h1>
         <form action="{{ url_for('update_info') }}" method="POST">
+            <input type="hidden" name="token" value="{{ token }}">
             <label for="email">Email:</label>
-            <input type="email" id="email" name="email" required>
+            <input type="email" id="email" name="email" value="{{ user.email }}" readonly style="background-color: #f0f0f0;">
             <label for="text">Enter New Topics:</label>
-            <textarea id="text" name="text" placeholder="Make sure to separate topics by a comma"></textarea>
+            <textarea id="text" name="text" placeholder="Make sure to separate topics by a comma">{{ user.text }}</textarea>
+            
+            <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h4 style="margin-top: 0; color: #333;">Market Data Options:</h4>
+                
+                <!-- Stock Suite Master Toggle -->
+                <div style="margin: 10px 0; padding: 10px; background: #e3f2fd; border-left: 4px solid #007bff; border-radius: 4px;">
+                    <input type="checkbox" id="include_stock_suite" name="include_stock_suite" {% if user.include_stock_suite %}checked{% endif %} style="width: auto; margin-right: 10px;" onclick="toggleStockSuite()">
+                    <label for="include_stock_suite" style="display: inline; font-weight: bold; color: #007bff;">
+                        Enable Stock Suite (All Features)
+                    </label>
+                    <p style="font-size: 12px; color: #666; margin: 5px 0 0 30px;">Includes all market data features below. Uncheck specific ones to exclude.</p>
+                </div>
+                
+                <div id="stock_suite_options" style="margin-left: 15px; margin-top: 15px;">
+                    <!-- Market Charts -->
+                    <div style="margin: 10px 0;">
+                        <input type="checkbox" id="include_charts" name="include_charts" {% if user.include_charts %}checked{% endif %} style="width: auto; margin-right: 10px;" onclick="toggleChartOptions()">
+                        <label for="include_charts" style="display: inline; font-weight: bold;">
+                            Include Market Charts
+                        </label>
+                    </div>
+                    
+                    <div id="chart_options" style="margin-left: 25px; display: {% if user.include_charts %}block{% else %}none{% endif %};">
+                        <div style="margin: 8px 0;">
+                            <input type="checkbox" id="include_sp500_chart" name="include_sp500_chart" {% if user.include_sp500_chart %}checked{% endif %} style="width: auto; margin-right: 10px;">
+                            <label for="include_sp500_chart" style="display: inline; font-weight: normal;">
+                                S&P 500 Chart
+                            </label>
+                        </div>
+                        <div style="margin: 8px 0;">
+                            <input type="checkbox" id="include_nasdaq_chart" name="include_nasdaq_chart" {% if user.include_nasdaq_chart %}checked{% endif %} style="width: auto; margin-right: 10px;">
+                            <label for="include_nasdaq_chart" style="display: inline; font-weight: normal;">
+                                NASDAQ Chart
+                            </label>
+                        </div>
+                        <div style="margin: 8px 0;">
+                            <input type="checkbox" id="include_bitcoin_chart" name="include_bitcoin_chart" {% if user.include_bitcoin_chart %}checked{% endif %} style="width: auto; margin-right: 10px;">
+                            <label for="include_bitcoin_chart" style="display: inline; font-weight: normal;">
+                                Bitcoin Chart
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Top 10 Stocks -->
+                    <div style="margin: 15px 0 0 0;">
+                        <input type="checkbox" id="include_top10_stocks" name="include_top10_stocks" {% if user.include_top10_stocks %}checked{% endif %} style="width: auto; margin-right: 10px;">
+                        <label for="include_top10_stocks" style="display: inline; font-weight: normal;">
+                            Include Top 10 S&P 500 Stocks (by index weight, with daily changes)
+                        </label>
+                    </div>
+                    
+                    <!-- Market News Sentiment -->
+                    <div style="margin: 15px 0 0 0;">
+                        <input type="checkbox" id="include_market_news" name="include_market_news" {% if user.include_market_news %}checked{% endif %} style="width: auto; margin-right: 10px;">
+                        <label for="include_market_news" style="display: inline; font-weight: normal;">
+                            Include Market News & Sentiment (S&P 500, NASDAQ & Bitcoin)
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <script>
+                function toggleStockSuite() {
+                    const stockSuite = document.getElementById('include_stock_suite');
+                    const allCheckboxes = [
+                        'include_charts',
+                        'include_sp500_chart',
+                        'include_nasdaq_chart',
+                        'include_bitcoin_chart',
+                        'include_top10_stocks',
+                        'include_market_news'
+                    ];
+                    
+                    if (stockSuite.checked) {
+                        // Check all features when Stock Suite is enabled
+                        allCheckboxes.forEach(id => {
+                            document.getElementById(id).checked = true;
+                        });
+                        // Show chart options
+                        document.getElementById('chart_options').style.display = 'block';
+                    }
+                }
+                
+                function toggleChartOptions() {
+                    const chartOptions = document.getElementById('chart_options');
+                    const mainCheckbox = document.getElementById('include_charts');
+                    chartOptions.style.display = mainCheckbox.checked ? 'block' : 'none';
+                    
+                    if (!mainCheckbox.checked) {
+                        document.getElementById('include_sp500_chart').checked = false;
+                        document.getElementById('include_nasdaq_chart').checked = false;
+                        document.getElementById('include_bitcoin_chart').checked = false;
+                    }
+                }
+            </script>
+            
             <button type="submit">Submit</button>
+        </form>
         <a href="/">Return to Home Page</a>
     </div>
 </body>

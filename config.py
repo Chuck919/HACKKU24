@@ -1,15 +1,6 @@
 import os
 from dotenv import load_dotenv
 
-# This is an example configuration file.
-# To use this application:
-# 1. Copy this file to config.py
-# 2. Update the values with your actual credentials
-# OR (recommended):
-# 1. Copy .env.example to .env
-# 2. Fill in your credentials in the .env file
-# 3. The config.py will automatically load them
-
 # Load environment variables from .env file
 load_dotenv()
 
@@ -24,10 +15,11 @@ class Config:
     # Mail settings
     MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
     MAIL_PORT = int(os.getenv('MAIL_PORT', '587'))
-    MAIL_USERNAME = os.getenv('MAIL_USERNAME', 'your_email@example.com')
-    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', 'your_app_password')
+    MAIL_USERNAME = os.getenv('MAIL_USERNAME')
+    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')
     MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True').lower() in ('true', '1', 'yes')
     MAIL_USE_SSL = os.getenv('MAIL_USE_SSL', 'False').lower() in ('true', '1', 'yes')
     
     # API Keys
-    MEDIASTACK_API_KEY = os.getenv('MEDIASTACK_API_KEY', 'your_mediastack_api_key')
+    MEDIASTACK_API_KEY = os.getenv('MEDIASTACK_API_KEY')
+    ALPHAVANTAGE_API_KEY = os.getenv('ALPHAVANTAGE_API_KEY')

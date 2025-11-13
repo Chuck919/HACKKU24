@@ -8,11 +8,11 @@
 </head>
 <body>
     <div class="container">
-    <h1>Welcome Back! {{email}}</h1>
+    <h1>Welcome Back! {{user.email}}</h1>
     <p>Your email address has already been submitted, but you can change topics or unsubscribe from our emails.</p>
     <a href="{{ url_for('index') }}">Return to Home Page</a>
-    <a href="{{ url_for('update_info', email=email) }}">Update Email Preferences</a>
-    <a href="{{ url_for('unsubscribe') }}">Unsubscribe to All Emails</a>
+    <a href="{{ url_for('update_info', token=token) }}">Update Email Preferences</a>
+    <a href="{{ url_for('unsubscribe', token=token) }}">Unsubscribe to All Emails</a>
     </div>
 </body>
 </html>

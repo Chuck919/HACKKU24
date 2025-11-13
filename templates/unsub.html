@@ -9,14 +9,19 @@
 <body>
     <div class="container">
     <h1>Unsubscribe from Emails</h1>
-    <p>Please enter your email address to unsubscribe:</p>
-    <form action="/unsubscribe" method="post">
-        {% if token %}
-        <input type="hidden" name="token" value="{{ token }}">
-        {% endif %}
-        <input type="email" name="email" placeholder="Your Email" required>
-        <button type="submit">Unsubscribe</button>
-    </form>
+    {% if user %}
+        <p>Are you sure you want to unsubscribe <strong>{{ user.email }}</strong> from all emails?</p>
+        <form action="/unsubscribe" method="post">
+            <input type="hidden" name="token" value="{{ token }}">
+            <button type="submit" style="background-color: #dc3545;">Yes, Unsubscribe Me</button>
+        </form>
+    {% else %}
+        <p>Please enter your email address to unsubscribe:</p>
+        <form action="/unsubscribe" method="post">
+            <input type="email" name="email" placeholder="Your Email" required>
+            <button type="submit">Unsubscribe</button>
+        </form>
+    {% endif %}
     <a href="/">Return to Home Page</a>
     </div>
 </body>

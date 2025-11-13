@@ -5,10 +5,250 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>News Update</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .chart-section {
+            margin: 30px 0;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .chart-image {
+            max-width: 100%;
+            height: auto;
+            margin: 15px 0;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stocks-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stocks-table th {
+            background-color: #007bff;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+        }
+        .stocks-table td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .stocks-table tr:last-child td {
+            border-bottom: none;
+        }
+        .stocks-table tr:hover {
+            background-color: #f8f9fa;
+        }
+        .price-up {
+            color: #26a69a;
+            font-weight: bold;
+        }
+        .price-down {
+            color: #ef5350;
+            font-weight: bold;
+        }
+        .arrow-up::before {
+            content: "▲ ";
+        }
+        .arrow-down::before {
+            content: "▼ ";
+        }
+        .insider-section {
+            margin: 30px 0;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .insider-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .insider-table th {
+            background-color: #6c757d;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+        }
+        .insider-table td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .insider-table tr:last-child td {
+            border-bottom: none;
+        }
+        .insider-table tr:hover {
+            background-color: #f8f9fa;
+        }
+        .buy-transaction {
+            background-color: #d4edda;
+        }
+        .sell-transaction {
+            background-color: #f8d7da;
+        }
+        .news-section {
+            margin: 30px 0;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .news-card {
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 15px 0;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .sentiment-positive {
+            border-left-color: #26a69a;
+        }
+        .sentiment-negative {
+            border-left-color: #ef5350;
+        }
+        .sentiment-neutral {
+            border-left-color: #ffa726;
+        }
+        .sentiment-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+        .sentiment-badge.positive {
+            background-color: #26a69a;
+            color: white;
+        }
+        .sentiment-badge.negative {
+            background-color: #ef5350;
+            color: white;
+        }
+        .sentiment-badge.neutral {
+            background-color: #ffa726;
+            color: white;
+        }
+        .ticker-tags {
+            margin-top: 10px;
+        }
+        .ticker-tag {
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            margin-right: 5px;
+        }
+    </style>
 </head>
 <body>
     <h1>AnyNews Daily Update</h1>
 
+    {% if top10_stocks %}
+    <div class="chart-section">
+        <h2 style="color: #007bff;">Top 10 S&P 500 Stocks</h2>
+        <p style="color: #666;">Daily performance of the 10 largest companies by market cap:</p>
+        
+        <table class="stocks-table">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Current Price</th>
+                    <th>Daily Change</th>
+                    <th>% Change</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stock in top10_stocks %}
+                <tr>
+                    <td><strong>{{ stock.symbol }}</strong></td>
+                    <td>${{ "%.2f"|format(stock.price) }}</td>
+                    <td class="{% if stock.direction == 'up' %}price-up arrow-up{% else %}price-down arrow-down{% endif %}">
+                        ${{ "%.2f"|format(stock.change|abs) }}
+                    </td>
+                    <td class="{% if stock.direction == 'up' %}price-up{% else %}price-down{% endif %}">
+                        {{ "%+.2f"|format(stock.change_pct) }}%
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if charts %}
+    <div class="chart-section">
+        <h2 style="color: #007bff;">Market Charts</h2>
+        <p style="color: #666;">Candlestick charts showing the last 30 days of trading:</p>
+        
+        {% for chart_name, chart_data in charts.items() %}
+            <div style="margin: 20px 0;">
+                <h3 style="color: #333;">{{ chart_name }}</h3>
+                <img src="data:image/png;base64,{{ chart_data }}" alt="{{ chart_name }} Chart" class="chart-image">
+            </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if market_news %}
+    <div class="news-section">
+        <h2 style="color: #007bff;">Market News & Sentiment (S&P 500, NASDAQ & Bitcoin)</h2>
+        <p style="color: #666;">Latest market news with AI-powered sentiment analysis for major market indices and Bitcoin:</p>
+        
+        {% for news_item in market_news %}
+        <div class="news-card {% if news_item.overall_sentiment == 'Bullish' or news_item.overall_sentiment == 'Somewhat-Bullish' %}sentiment-positive{% elif news_item.overall_sentiment == 'Bearish' or news_item.overall_sentiment == 'Somewhat-Bearish' %}sentiment-negative{% else %}sentiment-neutral{% endif %}">
+            <h3 style="color: #333; margin-top: 0;">
+                {{ news_item.title }}
+                <span class="sentiment-badge {% if news_item.overall_sentiment == 'Bullish' or news_item.overall_sentiment == 'Somewhat-Bullish' %}positive{% elif news_item.overall_sentiment == 'Bearish' or news_item.overall_sentiment == 'Somewhat-Bearish' %}negative{% else %}neutral{% endif %}">
+                    {{ news_item.overall_sentiment }}
+                </span>
+            </h3>
+            <p style="color: #666; font-size: 13px; margin: 5px 0;">
+                <strong>Source:</strong> {{ news_item.source }} | 
+                <strong>Published:</strong> {{ news_item.time_published }}
+            </p>
+            <p style="color: #333;">{{ news_item.summary }}</p>
+            
+            {% if news_item.ticker_sentiments %}
+            <div class="ticker-tags">
+                <strong style="font-size: 13px;">Index Sentiment:</strong>
+                {% for ticker, sentiment_data in news_item.ticker_sentiments.items() %}
+                <span class="ticker-tag">{{ ticker }} ({{ sentiment_data.sentiment }})</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            <p style="margin-top: 10px;">
+                <a href="{{ news_item.url }}" style="color: #007bff; text-decoration: none; font-weight: bold;">Read Full Article →</a>
+            </p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if articles %}
     {% for keyword, keyword_articles in articles.items() %}
         <h2 style="color: #007bff;">Topic: {{ keyword }}</h2>
         {% if keyword_articles %}
@@ -26,6 +266,13 @@
             <p style="color: black;">Sorry! No articles related to this topic today!</p>
         {% endif %}
     {% endfor %}
+    {% else %}
+        {% if not charts and not top10_stocks and not insider_data and not market_news %}
+        <p style="color: #666; font-style: italic; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+            No keyword articles for today. Add topics in your preferences to receive news articles!
+        </p>
+        {% endif %}
+    {% endif %}
 
     <p style="color: black;">If you no longer wish to receive emails from us, you can <a href="https://changwen919.eu.pythonanywhere.com/unsubscribe">unsubscribe</a>.</p>
     <p style="color: black;">To return to our homepage, click <a href="https://changwen919.eu.pythonanywhere.com/">here</a>.</p>

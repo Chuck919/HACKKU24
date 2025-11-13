@@ -2,6 +2,52 @@
 
 The inspiration behind our project, [**Any News**](https://changwen919.eu.pythonanywhere.com/), is rooted in our commitment to social good. In today's information age, staying informed is crucial, but the overwhelming volume of news can be daunting and often leads to information overload. Learning about the topics you want on a daily basis not only keeps you informed on what your interests are but also keeps you engaged in society. With [**Any News**](https://changwen919.eu.pythonanywhere.com/), you can easily access any information you want and need, and never have to sift through thousands of articles again.
 
+## Setup Instructions
+
+### Prerequisites
+- Python 3.7+
+- pip (Python package manager)
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/Chuck919/HACKKU24.git
+cd HACKKU24
+```
+
+2. Install required dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Set up environment variables:
+   - Copy `.env.example` to `.env`:
+     ```bash
+     cp .env.example .env
+     ```
+   - Edit `.env` and fill in your actual credentials:
+     - `SECRET_KEY`: A secure random string for Flask sessions
+     - `MAIL_USERNAME`: Your Gmail address
+     - `MAIL_PASSWORD`: Your Gmail App Password (see [Gmail App Passwords](https://support.google.com/accounts/answer/185833))
+     - `MEDIASTACK_API_KEY`: Your MediaStack API key from [mediastack.com](https://mediastack.com/)
+
+4. Initialize the database:
+```bash
+python -c "from app import app, db; app.app_context().push(); db.create_all()"
+```
+
+5. Run the application:
+```bash
+python app.py
+```
+
+The application will be available at `http://localhost:5000`
+
+### Configuration
+
+All sensitive configuration is managed through environment variables in the `.env` file. Never commit this file to version control.
+
 ## What it does
 
 [**Any News**](https://changwen919.eu.pythonanywhere.com/) is a web application that allows users to input their topics of interest and their email address. Using the _MediaStack API_, the application fetches relevant articles related to the user's specified topics. Users receive daily email updates containing curated news articles tailored to their preferences. Additionally, users have the flexibility to unsubscribe from the email updates at any time and modify their selected topics.
