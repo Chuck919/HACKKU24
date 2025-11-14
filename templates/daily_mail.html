@@ -201,7 +201,7 @@
     {% if top10_stocks %}
     <div class="chart-section">
         <h2 style="color: #007bff;">Top 10 S&P 500 Stocks with Trading Indicators</h2>
-        <p style="color: #666;">Daily performance with RSI + SMA-based trading signals:</p>
+        <p style="color: #666;">Daily performance with RSI + SMA50/SMA100 + OBV (On-Balance Volume) trading signals:</p>
         
         <table class="stocks-table">
             <thead>
@@ -245,15 +245,68 @@
         </table>
         <p style="color: #999; font-size: 11px; margin-top: 10px; line-height: 1.6;">
             <strong>Indicators:</strong><br>
-            <strong>RSI (Relative Strength Index):</strong> <span style="color: green;">●</span> &lt;30 = Oversold (potential buy) | 
+            <strong>RSI (Relative Strength Index):</strong> <span style="color: green;">●</span> &lt;30 = Oversold | 
             <span style="color: #666;">●</span> 30-70 = Neutral | 
-            <span style="color: red;">●</span> &gt;70 = Overbought (potential sell)<br>
-            <strong>Signals:</strong> Based on SMA20/SMA50 crossover + RSI confirmation | 
-            <span style="color: darkgreen; font-weight: bold;">STRONG BUY</span> = Bullish trend + RSI&lt;40 (strong momentum) | 
-            <span style="color: green; font-weight: bold;">BUY</span> = Bullish trend | 
-            <span style="color: orange; font-weight: bold;">HOLD</span> = Mixed/Neutral | 
-            <span style="color: red; font-weight: bold;">SELL</span> = Bearish trend | 
-            <span style="color: darkred; font-weight: bold;">STRONG SELL</span> = Bearish trend + RSI&gt;60 (strong downward momentum)
+            <span style="color: red;">●</span> &gt;70 = Overbought<br>
+            <strong>Signals:</strong> Based on SMA50/SMA100 crossover + RSI + OBV (On-Balance Volume) | 
+            <span style="color: darkgreen; font-weight: bold;">STRONG BUY</span> = Price&gt;50&gt;100 + Slopes↑ + OBV↑ + RSI&lt;50 | 
+            <span style="color: green; font-weight: bold;">BUY</span> = Price&gt;100 + OBV≥avg + RSI 50-60 | 
+            <span style="color: orange; font-weight: bold;">HOLD</span> = Mixed signals/flat trends | 
+            <span style="color: red; font-weight: bold;">SELL</span> = Price&lt;50&lt;100 + OBV↓ + RSI 30-45 | 
+            <span style="color: darkred; font-weight: bold;">STRONG SELL</span> = Price&lt;&lt;SMAs + OBV↓↓ + RSI&lt;30
+        </p>
+    </div>
+    {% endif %}
+
+    {% if crypto_data %}
+    <div class="chart-section">
+        <h2 style="color: #007bff;">Cryptocurrency Market with Trading Indicators</h2>
+        <p style="color: #666;">Bitcoin & Ethereum daily performance with RSI + SMA50/SMA100 + OBV trading signals:</p>
+        
+        <table class="stocks-table">
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Name</th>
+                    <th>Current Price</th>
+                    <th>Daily Change</th>
+                    <th>% Change</th>
+                    <th>RSI (14)</th>
+                    <th>Signal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for crypto in crypto_data %}
+                <tr>
+                    <td><strong>{{ crypto.symbol }}</strong></td>
+                    <td>{{ crypto.name }}</td>
+                    <td>${{ "%.2f"|format(crypto.price) }}</td>
+                    <td class="{% if crypto.direction == 'up' %}price-up arrow-up{% else %}price-down arrow-down{% endif %}">
+                        ${{ "%.2f"|format(crypto.change|abs) }}
+                    </td>
+                    <td class="{% if crypto.direction == 'up' %}price-up{% else %}price-down{% endif %}">
+                        {{ "%+.2f"|format(crypto.change_pct) }}%
+                    </td>
+                    <td>
+                        {% if crypto.rsi %}
+                            <span style="color: {% if crypto.rsi < 30 %}green{% elif crypto.rsi > 70 %}red{% else %}#333{% endif %}; font-weight: bold;">
+                                {{ "%.1f"|format(crypto.rsi) }}
+                            </span>
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span style="padding: 3px 6px; border-radius: 4px; font-weight: bold; background-color: {{ crypto.signal_color }}; color: white; font-size: 9px; white-space: nowrap;">
+                            {{ crypto.signal }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p style="color: #999; font-size: 11px; margin-top: 10px; line-height: 1.6;">
+            <strong>Note:</strong> Cryptocurrency markets are highly volatile. Same indicators as stocks: RSI + SMA50/SMA100 + OBV crossover strategy.
         </p>
     </div>
     {% endif %}
@@ -261,7 +314,7 @@
     {% if charts %}
     <div class="chart-section">
         <h2 style="color: #007bff;">Market Charts</h2>
-        <p style="color: #666;">Candlestick charts showing the last 30 days of trading:</p>
+        <p style="color: #666;">Candlestick charts showing recent trading activity (up to 30 days):</p>
         
         {% for chart_name, chart_data in charts.items() %}
             <div style="margin: 20px 0;">
