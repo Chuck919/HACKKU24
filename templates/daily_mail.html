@@ -200,8 +200,8 @@
 
     {% if top10_stocks %}
     <div class="chart-section">
-        <h2 style="color: #007bff;">Top 10 S&P 500 Stocks</h2>
-        <p style="color: #666;">Daily performance of the 10 largest companies by market cap:</p>
+        <h2 style="color: #007bff;">Top 10 S&P 500 Stocks with Trading Indicators</h2>
+        <p style="color: #666;">Daily performance with RSI + SMA-based trading signals:</p>
         
         <table class="stocks-table">
             <thead>
@@ -210,6 +210,8 @@
                     <th>Current Price</th>
                     <th>Daily Change</th>
                     <th>% Change</th>
+                    <th>RSI (14)</th>
+                    <th>Signal</th>
                 </tr>
             </thead>
             <tbody>
@@ -223,10 +225,36 @@
                     <td class="{% if stock.direction == 'up' %}price-up{% else %}price-down{% endif %}">
                         {{ "%+.2f"|format(stock.change_pct) }}%
                     </td>
+                    <td>
+                        {% if stock.rsi %}
+                            <span style="color: {% if stock.rsi < 30 %}green{% elif stock.rsi > 70 %}red{% else %}#333{% endif %}; font-weight: bold;">
+                                {{ "%.1f"|format(stock.rsi) }}
+                            </span>
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span style="padding: 3px 6px; border-radius: 4px; font-weight: bold; background-color: {{ stock.signal_color }}; color: white; font-size: 9px; white-space: nowrap;">
+                            {{ stock.signal }}
+                        </span>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+        <p style="color: #999; font-size: 11px; margin-top: 10px; line-height: 1.6;">
+            <strong>Indicators:</strong><br>
+            <strong>RSI (Relative Strength Index):</strong> <span style="color: green;">●</span> &lt;30 = Oversold (potential buy) | 
+            <span style="color: #666;">●</span> 30-70 = Neutral | 
+            <span style="color: red;">●</span> &gt;70 = Overbought (potential sell)<br>
+            <strong>Signals:</strong> Based on SMA20/SMA50 crossover + RSI confirmation | 
+            <span style="color: darkgreen; font-weight: bold;">STRONG BUY</span> = Bullish trend + RSI&lt;40 (strong momentum) | 
+            <span style="color: green; font-weight: bold;">BUY</span> = Bullish trend | 
+            <span style="color: orange; font-weight: bold;">HOLD</span> = Mixed/Neutral | 
+            <span style="color: red; font-weight: bold;">SELL</span> = Bearish trend | 
+            <span style="color: darkred; font-weight: bold;">STRONG SELL</span> = Bearish trend + RSI&gt;60 (strong downward momentum)
+        </p>
     </div>
     {% endif %}
 

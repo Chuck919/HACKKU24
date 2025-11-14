@@ -26,6 +26,31 @@ app.config.from_object(Config)
 # Initialize Flask-Mail
 mail = Mail(app)
 
+# Alpha Vantage API Keys - Primary and Fallback
+ALPHAVANTAGE_KEYS = [
+    app.config.get('ALPHAVANTAGE_API_KEY'),
+    app.config.get('ALPHAVANTAGE_API_KEY_BACKUP')
+]
+# Filter out None values in case backup key isn't configured
+ALPHAVANTAGE_KEYS = [key for key in ALPHAVANTAGE_KEYS if key]
+current_key_index = 0
+
+def get_api_key():
+    """Get current Alpha Vantage API key"""
+    global current_key_index
+    if current_key_index < len(ALPHAVANTAGE_KEYS):
+        return ALPHAVANTAGE_KEYS[current_key_index]
+    return ALPHAVANTAGE_KEYS[0]  # Fallback to first key
+
+def switch_api_key():
+    """Switch to next available API key"""
+    global current_key_index
+    current_key_index += 1
+    if current_key_index >= len(ALPHAVANTAGE_KEYS):
+        current_key_index = 0  # Cycle back to first key
+    print(f"    Switching to API key #{current_key_index + 1}")
+    return get_api_key()
+
 # Top 10 S&P 500 stocks by percentage weight (as of 2025)
 # Sorted by actual S&P 500 index weight, not market cap
 TOP_10_SP500 = ['NVDA', 'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'AVGO', 'GOOG', 'META',  'TSLA', 'BRK.B']
@@ -81,9 +106,9 @@ def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
     """
     Fetch market news with sentiment analysis
     Uses condensed API call to get news for multiple tickers/topics
+    NOTE: Alpha Vantage NEWS_SENTIMENT only supports 'tickers' parameter, not 'topics'
     """
     print(f"  Fetching market news & sentiment...")
-    print(f"    Topics: {topics}")
     print(f"    Tickers: {tickers}")
     print(f"    Limit: {limit}")
     
@@ -103,11 +128,6 @@ def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
         if tickers:
             params['tickers'] = ','.join(tickers[:10])  # Limit to 10 tickers
             print(f"    Added tickers to params: {params['tickers']}")
-        
-        # Add topics if provided
-        if topics:
-            params['topics'] = ','.join(topics)
-            print(f"    Added topics to params: {params['topics']}")
         
         print(f"    Making request to Alpha Vantage NEWS_SENTIMENT API...")
         response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
@@ -478,6 +498,191 @@ def generate_mock_price_data(asset_name, num_days=90):
     
     return np.array(prices)
 
+def calculate_trading_signal(symbol, api_key):
+    """
+    Calculate trading signal (BUY/SELL/HOLD) using SMA crossover + RSI strategy
+    Uses Alpha Vantage SMA (Simple Moving Average) and RSI (Relative Strength Index)
+    Returns: dict with signal, sma_fast, sma_slow, rsi, current_price, or None if failed
+    """
+    try:
+        print(f"      Fetching technical indicators for {symbol}...")
+        
+        # Fetch RSI (Relative Strength Index)
+        params_rsi = {
+            'function': 'RSI',
+            'symbol': symbol,
+            'interval': 'daily',
+            'time_period': 14,
+            'series_type': 'close',
+            'apikey': api_key
+        }
+        response_rsi = requests.get('https://www.alphavantage.co/query', params=params_rsi, timeout=10)
+        data_rsi = response_rsi.json()
+        
+        # Check for rate limit and switch API key if needed
+        if 'Note' in data_rsi or 'Information' in data_rsi:
+            print(f"      Rate limit hit on RSI, switching API key...")
+            api_key = switch_api_key()
+            params_rsi['apikey'] = api_key
+            time.sleep(2)
+            response_rsi = requests.get('https://www.alphavantage.co/query', params=params_rsi, timeout=10)
+            data_rsi = response_rsi.json()
+        
+        # Check for errors
+        if 'Technical Analysis: RSI' not in data_rsi:
+            print(f"      WARNING: No RSI data for {symbol}")
+            return None
+        
+        # Get most recent RSI value
+        rsi_data = data_rsi['Technical Analysis: RSI']
+        latest_date_rsi = sorted(rsi_data.keys(), reverse=True)[0]
+        rsi = float(rsi_data[latest_date_rsi]['RSI'])
+        print(f"      RSI: {rsi:.2f}")
+        
+        # Wait for rate limit (15 seconds between calls)
+        time.sleep(15)
+        
+        # Fetch SMA 20 (fast)
+        params_fast = {
+            'function': 'SMA',
+            'symbol': symbol,
+            'interval': 'daily',
+            'time_period': 20,
+            'series_type': 'close',
+            'apikey': api_key
+        }
+        response_fast = requests.get('https://www.alphavantage.co/query', params=params_fast, timeout=10)
+        data_fast = response_fast.json()
+        
+        # Check for rate limit and switch API key if needed
+        if 'Note' in data_fast or 'Information' in data_fast:
+            print(f"      Rate limit hit on SMA20, switching API key...")
+            api_key = switch_api_key()
+            params_fast['apikey'] = api_key
+            time.sleep(2)
+            response_fast = requests.get('https://www.alphavantage.co/query', params=params_fast, timeout=10)
+            data_fast = response_fast.json()
+        
+        if 'Technical Analysis: SMA' not in data_fast:
+            print(f"      WARNING: No SMA20 data for {symbol}")
+            return None
+        
+        # Get most recent SMA 20 value
+        sma_fast_data = data_fast['Technical Analysis: SMA']
+        latest_date_fast = sorted(sma_fast_data.keys(), reverse=True)[0]
+        sma_fast = float(sma_fast_data[latest_date_fast]['SMA'])
+        print(f"      SMA20: ${sma_fast:.2f}")
+        
+        # Wait for rate limit (15 seconds between calls)
+        time.sleep(15)
+        
+        # Fetch SMA 50 (slow)
+        params_slow = {
+            'function': 'SMA',
+            'symbol': symbol,
+            'interval': 'daily',
+            'time_period': 50,
+            'series_type': 'close',
+            'apikey': api_key
+        }
+        response_slow = requests.get('https://www.alphavantage.co/query', params=params_slow, timeout=10)
+        data_slow = response_slow.json()
+        
+        # Check for rate limit and switch API key if needed
+        if 'Note' in data_slow or 'Information' in data_slow:
+            print(f"      Rate limit hit on SMA50, switching API key...")
+            api_key = switch_api_key()
+            params_slow['apikey'] = api_key
+            time.sleep(2)
+            response_slow = requests.get('https://www.alphavantage.co/query', params=params_slow, timeout=10)
+            data_slow = response_slow.json()
+        
+        if 'Technical Analysis: SMA' not in data_slow:
+            print(f"      WARNING: No SMA50 data for {symbol}")
+            return None
+        
+        # Get most recent SMA 50 value
+        sma_slow_data = data_slow['Technical Analysis: SMA']
+        latest_date_slow = sorted(sma_slow_data.keys(), reverse=True)[0]
+        sma_slow = float(sma_slow_data[latest_date_slow]['SMA'])
+        print(f"      SMA50: ${sma_slow:.2f}")
+        
+        # Wait for rate limit (15 seconds between calls)
+        time.sleep(15)
+        
+        # Get current price
+        params_quote = {
+            'function': 'GLOBAL_QUOTE',
+            'symbol': symbol,
+            'apikey': api_key
+        }
+        response_quote = requests.get('https://www.alphavantage.co/query', params=params_quote, timeout=10)
+        data_quote = response_quote.json()
+        
+        # Check for rate limit and switch API key if needed
+        if 'Note' in data_quote or 'Information' in data_quote:
+            print(f"      Rate limit hit on QUOTE, switching API key...")
+            api_key = switch_api_key()
+            params_quote['apikey'] = api_key
+            time.sleep(2)
+            response_quote = requests.get('https://www.alphavantage.co/query', params=params_quote, timeout=10)
+            data_quote = response_quote.json()
+        
+        if 'Global Quote' not in data_quote:
+            print(f"      WARNING: No quote data for {symbol}")
+            return None
+        
+        current_price = float(data_quote['Global Quote'].get('05. price', 0))
+        print(f"      Current Price: ${current_price:.2f}")
+        
+        # Calculate signal based on SMA crossover + RSI
+        # STRONG BUY: Price > SMA20 > SMA50 AND RSI < 40 (bullish with low RSI)
+        # BUY: Price > SMA20 > SMA50 (bullish)
+        # STRONG SELL: Price < SMA20 < SMA50 AND RSI > 60 (bearish with high RSI)
+        # SELL: Price < SMA20 < SMA50 (bearish)
+        # HOLD: Otherwise (neutral)
+        
+        if current_price > sma_fast and sma_fast > sma_slow:
+            if rsi < 40:
+                signal = 'STRONG BUY'
+                signal_color = 'darkgreen'
+            else:
+                signal = 'BUY'
+                signal_color = 'green'
+        elif current_price < sma_fast and sma_fast < sma_slow:
+            if rsi > 60:
+                signal = 'STRONG SELL'
+                signal_color = 'darkred'
+            else:
+                signal = 'SELL'
+                signal_color = 'red'
+        else:
+            # Check RSI for oversold/overbought
+            if rsi < 30:
+                signal = 'HOLD (Oversold)'
+                signal_color = 'orange'
+            elif rsi > 70:
+                signal = 'HOLD (Overbought)'
+                signal_color = 'orange'
+            else:
+                signal = 'HOLD'
+                signal_color = 'orange'
+        
+        print(f"      Signal: {signal}")
+        
+        return {
+            'signal': signal,
+            'signal_color': signal_color,
+            'rsi': rsi,
+            'sma_fast': sma_fast,
+            'sma_slow': sma_slow,
+            'current_price': current_price
+        }
+        
+    except Exception as e:
+        print(f"      ERROR: Failed to get trading signal for {symbol}: {str(e)[:50]}")
+        return None
+
 def fetch_top10_sp500_stocks():
     """
     Fetch top 10 S&P 500 stocks with current price and daily change
@@ -488,12 +693,12 @@ def fetch_top10_sp500_stocks():
     print("  Fetching Top 10 S&P 500 stocks...")
     print("  NOTE: Rate limit is 5 calls/minute, this will take ~5 minutes")
     
-    if not app.config.get('ALPHAVANTAGE_API_KEY'):
+    if not get_api_key():
         print("    WARNING: No Alpha Vantage API key configured, using mock data")
         return generate_mock_top10_data()
     
     stocks_data = []
-    api_key = app.config['ALPHAVANTAGE_API_KEY']
+    api_key = get_api_key()
     
     for idx, symbol in enumerate(TOP_10_SP500, 1):
         try:
@@ -526,22 +731,35 @@ def fetch_top10_sp500_stocks():
                     daily_change = current_price - previous_close
                     daily_change_pct = (daily_change / previous_close) * 100
                     
-                    stocks_data.append({
+                    stock_info = {
                         'symbol': symbol,
                         'price': current_price,
                         'change': daily_change,
                         'change_pct': daily_change_pct,
-                        'direction': 'up' if daily_change >= 0 else 'down'
-                    })
+                        'direction': 'up' if daily_change >= 0 else 'down',
+                        'signal': 'N/A',
+                        'signal_color': 'gray'
+                    }
+                    
+                    # Get trading signal (RSI + SMA strategy)
+                    print(f"    Fetching trading indicators...")
+                    trading_signal = calculate_trading_signal(symbol, api_key)
+                    if trading_signal:
+                        stock_info['signal'] = trading_signal['signal']
+                        stock_info['signal_color'] = trading_signal['signal_color']
+                        stock_info['rsi'] = trading_signal.get('rsi', 0)
+                        print(f"    Trading Signal: {trading_signal['signal']}")
+                    
+                    stocks_data.append(stock_info)
                     print(f"    SUCCESS: {symbol}: ${current_price:.2f} ({daily_change_pct:+.2f}%)")
                 else:
                     print(f"    WARNING: {symbol}: Invalid price data")
             else:
                 print(f"    WARNING: {symbol}: No data returned from API")
             
-            # Rate limiting: 5 calls per minute = wait 30 seconds between calls for safety
+            # Rate limiting: Wait 15 seconds between stocks to avoid rate limit
             if idx < len(TOP_10_SP500):
-                wait_time = 30
+                wait_time = 15
                 print(f"    [{idx}/{len(TOP_10_SP500)}] Waiting {wait_time}s for rate limit...")
                 time.sleep(wait_time)
                 
@@ -569,18 +787,34 @@ def generate_mock_top10_data():
         'LLY': 750.0, 'AVGO': 170.0
     }
     
+    signals = ['STRONG BUY', 'BUY', 'HOLD', 'SELL', 'STRONG SELL']
+    signal_colors = {
+        'STRONG BUY': 'darkgreen', 
+        'BUY': 'green', 
+        'HOLD': 'orange', 
+        'SELL': 'red',
+        'STRONG SELL': 'darkred'
+    }
+    
     np.random.seed(42)
     for symbol in TOP_10_SP500:
         base_price = base_prices[symbol]
         daily_change_pct = np.random.normal(0, 1.5)
         daily_change = base_price * (daily_change_pct / 100)
         
+        # Random signal and RSI for mock data
+        signal = np.random.choice(signals)
+        rsi = np.random.uniform(25, 75)  # RSI between 25-75
+        
         stocks_data.append({
             'symbol': symbol,
             'price': base_price,
             'change': daily_change,
             'change_pct': daily_change_pct,
-            'direction': 'up' if daily_change >= 0 else 'down'
+            'direction': 'up' if daily_change >= 0 else 'down',
+            'signal': signal,
+            'signal_color': signal_colors[signal],
+            'rsi': rsi
         })
     
     return stocks_data
@@ -746,33 +980,34 @@ if __name__ == '__main__':
                 print(f"  Stock Suite: {'Yes' if include_stock_suite else 'No'}")
                 print(f"  Market News: {'Yes' if include_news_sentiment else 'No'}")
                 
-                # Fetch keyword-based news articles
+                # COMMENTED OUT FOR TESTING: Fetch keyword-based news articles
                 articles_by_keyword = {}
-                if keywords_text and not keywords_text.isspace():
-                    keywords = [keyword.strip() for keyword in keywords_text.split(',') if keyword.strip()]
-                    print(f"  Keywords: {', '.join(keywords)}")
+                # if keywords_text and not keywords_text.isspace():
+                #     keywords = [keyword.strip() for keyword in keywords_text.split(',') if keyword.strip()]
+                #     print(f"  Keywords: {', '.join(keywords)}")
 
-                    for keyword in keywords:
-                        articles = fetch_news(keyword)
-                        print(f"  → Found {len(articles)} articles for '{keyword}'")
+                #     for keyword in keywords:
+                #         articles = fetch_news(keyword)
+                #         print(f"  → Found {len(articles)} articles for '{keyword}'")
                         
-                        articles_for_user = []
-                        for article in articles:
-                            try:
-                                article_info = {
-                                    'title': article.get('title', 'No title'),
-                                    'description': article.get('description', 'No description'),
-                                    'source': article.get('source', 'Unknown'),
-                                    'link': article.get('url', '#')
-                                }
-                                articles_for_user.append(article_info)
-                            except Exception as e:
-                                print(f"  ERROR: Error processing article: {e}")
+                #         articles_for_user = []
+                #         for article in articles:
+                #             try:
+                #                 article_info = {
+                #                     'title': article.get('title', 'No title'),
+                #                     'description': article.get('description', 'No description'),
+                #                     'source': article.get('source', 'Unknown'),
+                #                     'link': article.get('url', '#')
+                #                 }
+                #                 articles_for_user.append(article_info)
+                #             except Exception as e:
+                #                 print(f"  ERROR: Error processing article: {e}")
                         
-                        if articles_for_user:
-                            articles_by_keyword[keyword] = articles_for_user
-                else:
-                    print(f"  No keywords provided")
+                #         if articles_for_user:
+                #             articles_by_keyword[keyword] = articles_for_user
+                # else:
+                #     print(f"  No keywords provided")
+                print(f"  SKIPPING keyword news for testing")
                 
                 # Check if user has ANY content to send (keywords OR stock features)
                 has_stock_features = (include_sp500 or include_nasdaq or include_bitcoin or 
@@ -783,15 +1018,16 @@ if __name__ == '__main__':
                     total_articles = sum(len(arts) for arts in articles_by_keyword.values()) if articles_by_keyword else 0
                     print(f"  Preparing email with {total_articles} total articles...")
                     
-                    # Generate charts only if user wants them
+                    # COMMENTED OUT FOR TESTING: Generate charts only if user wants them
                     user_charts = {}
-                    if include_sp500 or include_nasdaq or include_bitcoin:
-                        user_prefs = {
-                            'sp500': include_sp500,
-                            'nasdaq': include_nasdaq,
-                            'bitcoin': include_bitcoin
-                        }
-                        user_charts = generate_market_charts(user_prefs)
+                    # if include_sp500 or include_nasdaq or include_bitcoin:
+                    #     user_prefs = {
+                    #         'sp500': include_sp500,
+                    #         'nasdaq': include_nasdaq,
+                    #         'bitcoin': include_bitcoin
+                    #     }
+                    #     user_charts = generate_market_charts(user_prefs)
+                    print(f"  SKIPPING charts for testing")
                     
                     # Get top 10 stocks if user wants them
                     user_top10 = fetch_top10_sp500_stocks() if include_top10 else None
@@ -801,7 +1037,6 @@ if __name__ == '__main__':
                     if include_news_sentiment:
                         # Track S&P 500, NASDAQ, and Bitcoin
                         user_market_news = fetch_market_news_sentiment(
-                            topics=['financial_markets', 'economy_macro', 'blockchain'],
                             tickers=['SPY', 'QQQ', 'BTC'],  # S&P 500, NASDAQ, and Bitcoin
                             limit=10
                         )
