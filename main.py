@@ -107,79 +107,145 @@ def fetch_insider_transactions(symbols_list):
 def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
     """
     Fetch market news with sentiment analysis
-    Uses condensed API call to get news for multiple tickers/topics
-    NOTE: Alpha Vantage NEWS_SENTIMENT only supports 'tickers' parameter, not 'topics'
+    NOTE: Alpha Vantage NEWS_SENTIMENT only supports ONE ticker at a time
+    We'll make separate calls for each ticker and combine results
     """
     print(f"  Fetching market news & sentiment...")
     print(f"    Tickers: {tickers}")
-    print(f"    Limit: {limit}")
+    print(f"    Limit per ticker: {limit}")
     
-    if not app.config.get('ALPHAVANTAGE_API_KEY'):
+    if not get_api_key():
         print("    WARNING: No Alpha Vantage API key configured")
         return []
     
+    all_news_items = []
+    seen_urls = set()  # Track URLs to avoid duplicates
+    
     try:
-        params = {
-            'function': 'NEWS_SENTIMENT',
-            'apikey': app.config['ALPHAVANTAGE_API_KEY'],
-            'sort': 'LATEST'
-        }
+        api_key = get_api_key()
         
-        # Add tickers if provided (comma-separated for batch request)
-        # NOTE: Do NOT add limit parameter - causes "Invalid inputs" error
+        # Make separate API call for each ticker
         if tickers:
-            params['tickers'] = ','.join(tickers[:10])  # Limit to 10 tickers
-            print(f"    Added tickers to params: {params['tickers']}")
-        
-        print(f"    Making request to Alpha Vantage NEWS_SENTIMENT API...")
-        response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
-        print(f"    Response status code: {response.status_code}")
-        
-        data = response.json()
-        print(f"    Response keys: {list(data.keys())}")
-        
-        # Check for errors or rate limiting
-        if 'Error Message' in data:
-            print(f"    ERROR: {data['Error Message']}")
-            return []
-        
-        if 'Note' in data:
-            print(f"    RATE LIMIT: {data['Note']}")
-            return []
-        
-        if 'Information' in data:
-            print(f"    INFO: {data['Information']}")
-            return []
-        
-        if 'feed' in data:
-            print(f"    Feed contains {len(data['feed'])} items")
-            news_items = []
-            for item in data['feed'][:limit]:
-                # Get ticker sentiments
-                ticker_sentiments = {}
-                if 'ticker_sentiment' in item:
-                    for ts in item['ticker_sentiment'][:3]:  # Top 3 tickers mentioned
-                        ticker_sentiments[ts.get('ticker', 'N/A')] = {
-                            'relevance': float(ts.get('relevance_score', 0)),
-                            'sentiment': ts.get('ticker_sentiment_label', 'Neutral')
-                        }
+            for idx, ticker in enumerate(tickers, 1):
+                print(f"\n    [{idx}/{len(tickers)}] Fetching news for {ticker}...")
                 
-                news_items.append({
-                    'title': item.get('title', 'No title'),
-                    'url': item.get('url', '#'),
-                    'time_published': item.get('time_published', 'N/A'),
-                    'source': item.get('source', 'Unknown'),
-                    'summary': item.get('summary', 'No summary')[:200] + '...',
-                    'overall_sentiment': item.get('overall_sentiment_label', 'Neutral'),
-                    'sentiment_score': float(item.get('overall_sentiment_score', 0)),
-                    'ticker_sentiments': ticker_sentiments
-                })
-            
-            print(f"    SUCCESS: Retrieved {len(news_items)} news articles")
-            return news_items
+                params = {
+                    'function': 'NEWS_SENTIMENT',
+                    'apikey': api_key,
+                    'tickers': ticker,  # Single ticker only
+                    'sort': 'LATEST',
+                    'limit': str(limit)  # Alpha Vantage accepts limit as string
+                }
+                
+                response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
+                print(f"       Response status: {response.status_code}")
+                
+                data = response.json()
+                print(f"       Response keys: {list(data.keys())}")
+                
+                # Check for rate limiting and switch API key
+                if 'Note' in data or ('Information' in data and 'rate limit' in data.get('Information', '').lower()):
+                    print(f"       RATE LIMIT: {data.get('Note') or data.get('Information')}")
+                    print(f"       Switching to backup API key...")
+                    api_key = switch_api_key()
+                    params['apikey'] = api_key
+                    time.sleep(2)
+                    response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
+                    data = response.json()
+                    print(f"       Retry Response keys: {list(data.keys())}")
+                    
+                    # If still failing after switch, skip this ticker
+                    if 'Note' in data or 'Information' in data:
+                        print(f"       WARNING: Both API keys exhausted, skipping {ticker}")
+                        continue
+                
+                # Check for errors
+                if 'Error Message' in data:
+                    print(f"       ERROR: {data['Error Message']}")
+                    continue
+                
+                if 'feed' in data:
+                    print(f"       Feed contains {len(data['feed'])} items")
+                    for item in data['feed']:
+                        # Skip duplicates
+                        url = item.get('url', '')
+                        if url in seen_urls:
+                            continue
+                        seen_urls.add(url)
+                        
+                        # Get ticker sentiments
+                        ticker_sentiments = {}
+                        if 'ticker_sentiment' in item:
+                            for ts in item['ticker_sentiment'][:3]:  # Top 3 tickers mentioned
+                                ticker_sentiments[ts.get('ticker', 'N/A')] = {
+                                    'relevance': float(ts.get('relevance_score', 0)),
+                                    'sentiment': ts.get('ticker_sentiment_label', 'Neutral')
+                                }
+                        
+                        all_news_items.append({
+                            'title': item.get('title', 'No title'),
+                            'url': url,
+                            'time_published': item.get('time_published', 'N/A'),
+                            'source': item.get('source', 'Unknown'),
+                            'summary': item.get('summary', 'No summary')[:200] + '...',
+                            'overall_sentiment': item.get('overall_sentiment_label', 'Neutral'),
+                            'sentiment_score': float(item.get('overall_sentiment_score', 0)),
+                            'ticker_sentiments': ticker_sentiments
+                        })
+                else:
+                    print(f"       WARNING: No feed data for {ticker}")
+                
+                # Brief pause between ticker requests
+                if idx < len(tickers):
+                    time.sleep(1)
         else:
-            print(f"    WARNING: No 'feed' key in response")
-            print(f"    Response data: {str(data)[:200]}")
+            # No specific tickers, get general market news
+            print(f"    Fetching general market news...")
+            params = {
+                'function': 'NEWS_SENTIMENT',
+                'apikey': api_key,
+                'sort': 'LATEST',
+                'limit': str(limit * 3)  # Get more since we're not filtering by ticker
+            }
+            
+            response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
+            data = response.json()
+            
+            # Check for rate limiting
+            if 'Note' in data or 'Information' in data:
+                print(f"    RATE LIMIT: {data.get('Note') or data.get('Information')}")
+                api_key = switch_api_key()
+                params['apikey'] = api_key
+                time.sleep(2)
+                response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
+                data = response.json()
+            
+            if 'feed' in data:
+                for item in data['feed'][:limit]:
+                    ticker_sentiments = {}
+                    if 'ticker_sentiment' in item:
+                        for ts in item['ticker_sentiment'][:3]:
+                            ticker_sentiments[ts.get('ticker', 'N/A')] = {
+                                'relevance': float(ts.get('relevance_score', 0)),
+                                'sentiment': ts.get('ticker_sentiment_label', 'Neutral')
+                            }
+                    
+                    all_news_items.append({
+                        'title': item.get('title', 'No title'),
+                        'url': item.get('url', '#'),
+                        'time_published': item.get('time_published', 'N/A'),
+                        'source': item.get('source', 'Unknown'),
+                        'summary': item.get('summary', 'No summary')[:200] + '...',
+                        'overall_sentiment': item.get('overall_sentiment_label', 'Neutral'),
+                        'sentiment_score': float(item.get('overall_sentiment_score', 0)),
+                        'ticker_sentiments': ticker_sentiments
+                    })
+        
+        if all_news_items:
+            print(f"\n    SUCCESS: Retrieved {len(all_news_items)} unique news articles")
+            return all_news_items[:limit]  # Limit total results
+        else:
+            print(f"    WARNING: No news items retrieved")
             return []
         
     except requests.exceptions.RequestException as e:
@@ -530,8 +596,12 @@ def generate_mock_price_data(asset_name, num_days=90):
     
     return np.array(prices)
 
-def calculate_rsi(prices, period=14):
-    """Calculate RSI from price data using Wilder's smoothing method"""
+def calculate_rsi(prices, period=21):
+    """
+    Calculate RSI from price data using Wilder's smoothing method
+    Default period increased to 21 for longer-term view and fewer whipsaws
+    Research shows 20-25 day RSI produces more reliable signals than shorter periods
+    """
     if len(prices) < period + 1:
         return None
     
@@ -539,7 +609,7 @@ def calculate_rsi(prices, period=14):
     gains = np.where(deltas > 0, deltas, 0)
     losses = np.where(deltas < 0, -deltas, 0)
     
-    # Initial average gain/loss (simple average of first 14 periods)
+    # Initial average gain/loss (simple average of first period)
     avg_gain = np.mean(gains[:period])
     avg_loss = np.mean(losses[:period])
     
@@ -577,33 +647,179 @@ def calculate_sma(data, period):
         return None
     return np.mean(data[-period:])
 
-def calculate_trading_signal(symbol, api_key):
+def calculate_adx(highs, lows, closes, period=14):
     """
-    Calculate trading signal using SMA50/SMA100 + RSI + OBV strategy
-    Fetches full time series (100 candles) and calculates all indicators locally
+    Calculate Average Directional Index (ADX) to measure trend strength
+    ADX > 25 indicates strong trend, < 20 indicates weak/sideways market
+    Returns ADX value or None if insufficient data
     
-    Signal Logic:
-    - STRONG BUY: Price > SMA50 > SMA100, slopes positive, OBV up, RSI < 50
-    - BUY: Price > SMA100, OBV up/neutral, RSI 50-60
-    - HOLD: Mixed signals, flat slopes, RSI 45-70
-    - SELL: Price < SMA50 < SMA100, OBV down, RSI 30-45
-    - STRONG SELL: Price << SMAs, OBV down, RSI < 30 or bearish divergence
+    Properly implements all 6 steps:
+    1-3: Calculate TR, +DM, -DM and smooth them
+    4: Calculate +DI and -DI
+    5: Calculate DX
+    6: Smooth DX to get ADX (this is the proper ADX calculation)
+    """
+    if len(closes) < period * 2:  # Need extra data for ADX smoothing
+        return None
     
-    Returns: dict with signal, sma50, sma100, rsi, obv, current_price, or None if failed
+    # Calculate True Range (TR)
+    tr_list = []
+    for i in range(1, len(closes)):
+        high_low = highs[i] - lows[i]
+        high_close = abs(highs[i] - closes[i-1])
+        low_close = abs(lows[i] - closes[i-1])
+        tr = max(high_low, high_close, low_close)
+        tr_list.append(tr)
+    
+    tr_array = np.array(tr_list)
+    
+    # Calculate +DM and -DM (Directional Movement)
+    plus_dm = []
+    minus_dm = []
+    for i in range(1, len(highs)):
+        high_diff = highs[i] - highs[i-1]
+        low_diff = lows[i-1] - lows[i]
+        
+        if high_diff > low_diff and high_diff > 0:
+            plus_dm.append(high_diff)
+        else:
+            plus_dm.append(0)
+        
+        if low_diff > high_diff and low_diff > 0:
+            minus_dm.append(low_diff)
+        else:
+            minus_dm.append(0)
+    
+    plus_dm = np.array(plus_dm)
+    minus_dm = np.array(minus_dm)
+    
+    # Smooth TR, +DM, -DM using Wilder's smoothing
+    atr = np.mean(tr_array[:period])
+    smoothed_plus_dm = np.mean(plus_dm[:period])
+    smoothed_minus_dm = np.mean(minus_dm[:period])
+    
+    # Track DX values for smoothing into ADX
+    dx_values = []
+    
+    for i in range(period, len(tr_array)):
+        # Smooth ATR, +DM, -DM
+        atr = (atr * (period - 1) + tr_array[i]) / period
+        smoothed_plus_dm = (smoothed_plus_dm * (period - 1) + plus_dm[i]) / period
+        smoothed_minus_dm = (smoothed_minus_dm * (period - 1) + minus_dm[i]) / period
+        
+        # Calculate +DI and -DI
+        if atr == 0:
+            continue
+        
+        plus_di = (smoothed_plus_dm / atr) * 100
+        minus_di = (smoothed_minus_dm / atr) * 100
+        
+        # Calculate DX
+        if plus_di + minus_di == 0:
+            continue
+        
+        dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
+        dx_values.append(dx)
+    
+    # Step 6: Smooth DX values to get ADX
+    if len(dx_values) < period:
+        return None
+    
+    # Initial ADX is the average of first 'period' DX values
+    adx = np.mean(dx_values[:period])
+    
+    # Apply Wilder's smoothing to remaining DX values
+    for i in range(period, len(dx_values)):
+        adx = (adx * (period - 1) + dx_values[i]) / period
+    
+    return adx
+
+def check_obv_trend(obv, lookback=5):
+    """
+    Check if OBV has a consistent trend over multiple days
+    Returns: 'rising' if OBV trending up, 'falling' if down, 'flat' if mixed
+    """
+    if len(obv) < lookback + 1:
+        return 'flat'
+    
+    recent_obv = obv[-lookback:]
+    
+    # Count rising vs falling days
+    rising_days = 0
+    falling_days = 0
+    
+    for i in range(1, len(recent_obv)):
+        if recent_obv[i] > recent_obv[i-1]:
+            rising_days += 1
+        elif recent_obv[i] < recent_obv[i-1]:
+            falling_days += 1
+    
+    # Need at least 60% of days in one direction for trend
+    threshold = lookback * 0.6
+    
+    if rising_days >= threshold:
+        return 'rising'
+    elif falling_days >= threshold:
+        return 'falling'
+    else:
+        return 'flat'
+
+def calculate_trading_signal(symbol, api_key, is_crypto=False):
+    """
+    Calculate trading signal using enhanced SMA50/SMA200 + RSI(21) + OBV + ADX strategy
+    
+    ENHANCEMENTS (Research-Backed):
+    - RSI period increased to 21 days (from 14) for fewer whipsaws and more reliable signals
+    - SMA200 instead of SMA100 for better long-term trend identification
+    - Proper ADX calculation with DX smoothing (6-step process, not just DX)
+    - ADX(14) filter: <20 (no trend), >=20 (trend present), >=25 (strong trend)
+    - Multi-day OBV trend: 5-day consistency check (rising/falling/flat)
+    - RSI thresholds optimized: <45 for strong signals, <55 for normal signals
+    - Signal ordering: STRONG signals evaluated first to prevent conflicts
+    
+    Args:
+        symbol: Stock ticker or crypto symbol (BTC, ETH)
+        api_key: Alpha Vantage API key
+        is_crypto: Whether this is crypto (uses DIGITAL_CURRENCY_DAILY endpoint)
+    
+    Signal Logic (evaluated in order):
+    STRONG BUY: Price>=SMA50>SMA200, ADX>=25, RSI<45, OBV rising
+    STRONG SELL: Price<SMA200, SMA50<SMA200, ADX>=25, RSI<45, OBV falling
+    BUY: Price>=SMA200, ADX>=20, RSI<55
+    SELL: Price<SMA50<SMA200, ADX>=20, RSI>45
+    HOLD: Price between SMAs OR ADX<20 OR RSI 55-70 OR OBV neutral
+    
+    Returns: dict with signal, sma50, sma200, sma_position, rsi, obv, adx, current_price, previous_close
     """
     try:
         print(f"\n      {'='*60}")
         print(f"      CALCULATING TRADING SIGNAL FOR {symbol}")
         print(f"      {'='*60}")
+        
+        # Fetch time series data based on asset type
         print(f"      Step 1: Fetching time series data...")
         
-        # Fetch TIME_SERIES_DAILY with 100 data points
-        params = {
-            'function': 'TIME_SERIES_DAILY',
-            'symbol': symbol,
-            'outputsize': 'compact',  # Returns latest 100 data points
-            'apikey': api_key
-        }
+        if not api_key:
+            print(f"      ERROR: API key required")
+            return None
+        
+        # Use different API endpoint for crypto vs stocks
+        if is_crypto:
+            params = {
+                'function': 'DIGITAL_CURRENCY_DAILY',
+                'symbol': symbol,
+                'market': 'USD',
+                'apikey': api_key
+            }
+            time_series_key = 'Time Series (Digital Currency Daily)'
+        else:
+            params = {
+                'function': 'TIME_SERIES_DAILY',
+                'symbol': symbol,
+                'outputsize': 'full',  # Returns full historical data for SMA200
+                'apikey': api_key
+            }
+            time_series_key = 'Time Series (Daily)'
         
         response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
         data = response.json()
@@ -619,36 +835,46 @@ def calculate_trading_signal(symbol, api_key):
             data = response.json()
         
         # Check for errors
-        if 'Time Series (Daily)' not in data:
+        if time_series_key not in data:
             print(f"      ERROR: No time series data returned")
             print(f"      Response keys: {list(data.keys())}")
             return None
         
-        time_series = data['Time Series (Daily)']
+        time_series = data[time_series_key]
+        
         print(f"      SUCCESS: Received {len(time_series)} candles from API")
         
-        # Sort dates and extract data
-        sorted_dates = sorted(time_series.keys(), reverse=True)  # Newest first
+        # Sort dates oldest to newest and take the most recent 200 for SMA200
+        all_dates = sorted(time_series.keys())  # Oldest to newest
         
-        if len(sorted_dates) < 100:
-            print(f"      WARNING: Not enough data (only {len(sorted_dates)} candles, need 100)")
-            if len(sorted_dates) < 50:
-                print(f"      ERROR: Insufficient data for SMA50/SMA100 calculation")
+        if len(all_dates) < 200:
+            print(f"      WARNING: Not enough data (only {len(all_dates)} candles, need 200)")
+            if len(all_dates) < 50:
+                print(f"      ERROR: Insufficient data for SMA50/SMA200 calculation")
                 return None
         
-        # Extract arrays (reverse to get oldest->newest for calculations)
+        # Take the most recent 200 dates (already in oldest->newest order)
+        recent_dates = all_dates[-200:] if len(all_dates) >= 200 else all_dates
+        
+        # Extract arrays (already oldest->newest for calculations)
         closes = []
         volumes = []
+        highs = []
+        lows = []
         
-        for date in reversed(sorted_dates[:100]):  # Take latest 100, reverse to oldest->newest
+        for date in recent_dates:
             closes.append(float(time_series[date]['4. close']))
             volumes.append(float(time_series[date]['5. volume']))
+            highs.append(float(time_series[date]['2. high']))
+            lows.append(float(time_series[date]['3. low']))
         
         closes = np.array(closes)
         volumes = np.array(volumes)
+        highs = np.array(highs)
+        lows = np.array(lows)
         
         print(f"      Step 2: Processing {len(closes)} candles (oldest to newest)")
-        print(f"      Date range: {sorted_dates[-1]} to {sorted_dates[0]}")
+        print(f"      Date range: {recent_dates[0]} to {recent_dates[-1]}")
         
         # Current price
         current_price = closes[-1]
@@ -657,118 +883,192 @@ def calculate_trading_signal(symbol, api_key):
         # Calculate indicators
         print(f"      Step 3: Calculating technical indicators...")
         sma50 = calculate_sma(closes, 50)
-        sma100 = calculate_sma(closes, 100)
-        rsi = calculate_rsi(closes, 14)
+        sma200 = calculate_sma(closes, 200)
+        rsi = calculate_rsi(closes, 21)  # Increased to 21-day for fewer whipsaws
         obv = calculate_obv(closes, volumes)
         obv_sma20 = calculate_sma(obv, 20)
+        adx = calculate_adx(highs, lows, closes, 14)  # ADX for trend strength
+        obv_trend = check_obv_trend(obv, lookback=5)  # Multi-day OBV trend
         
-        if sma50 is None or sma100 is None or rsi is None or obv_sma20 is None:
+        if sma50 is None or sma200 is None or rsi is None or obv_sma20 is None:
             print(f"      ERROR: Not enough data to calculate indicators")
-            print(f"      SMA50: {sma50}, SMA100: {sma100}, RSI: {rsi}, OBV_SMA20: {obv_sma20}")
+            print(f"      SMA50: {sma50}, SMA200: {sma200}, RSI(21): {rsi}, OBV_SMA20: {obv_sma20}")
             return None
         
         # Calculate slopes (5-day lookback)
         # We need to calculate the SMA values from 5 days ago using data up to that point
-        if len(closes) >= 105:  # Need at least 105 days for SMA100 from 5 days ago
-            # Calculate SMA50 and SMA100 from 5 days ago (using data up to index -5)
+        if len(closes) >= 205:  # Need at least 205 days for SMA200 from 5 days ago
+            # Calculate SMA50 and SMA200 from 5 days ago (using data up to index -5)
             closes_5days_ago = closes[:-5]
             sma50_5days_ago = np.mean(closes_5days_ago[-50:]) if len(closes_5days_ago) >= 50 else sma50
-            sma100_5days_ago = np.mean(closes_5days_ago[-100:]) if len(closes_5days_ago) >= 100 else sma100
-        elif len(closes) >= 55:  # Can calculate SMA50 from 5 days ago but not SMA100
+            sma200_5days_ago = np.mean(closes_5days_ago[-200:]) if len(closes_5days_ago) >= 200 else sma200
+        elif len(closes) >= 55:  # Can calculate SMA50 from 5 days ago but not SMA200
             closes_5days_ago = closes[:-5]
             sma50_5days_ago = np.mean(closes_5days_ago[-50:])
-            sma100_5days_ago = sma100  # Not enough data, use current
+            sma200_5days_ago = sma200  # Not enough data, use current
         else:
             sma50_5days_ago = sma50  # Not enough data, use current
-            sma100_5days_ago = sma100
+            sma200_5days_ago = sma200
         
         slope_50 = sma50 - sma50_5days_ago
-        slope_100 = sma100 - sma100_5days_ago
+        slope_200 = sma200 - sma200_5days_ago
         
         # Current OBV
         obv_current = obv[-1]
         
+        # Enhanced status indicators
         rsi_status = 'Oversold' if rsi < 30 else 'Overbought' if rsi > 70 else 'Neutral'
-        obv_status = 'Above avg' if obv_current > obv_sma20 else 'Below avg'
+        obv_status = f'{obv_trend.capitalize()} trend' if obv_trend != 'flat' else 'Flat/Mixed'
+        
+        # ADX status with granular thresholds
+        if adx is None:
+            adx_status = 'N/A'
+        elif adx < 20:
+            adx_status = 'No trend'
+        elif 20 <= adx < 25:
+            adx_status = 'Trend forming'
+        else:  # adx >= 25
+            adx_status = 'Strong trend'
         
         print(f"\n      TECHNICAL INDICATORS:")
         print(f"      ├─ SMA50:       ${sma50:>12,.2f}  (5-day slope: {slope_50:>+8.2f})")
-        print(f"      ├─ SMA100:      ${sma100:>12,.2f}  (5-day slope: {slope_100:>+8.2f})")
-        print(f"      ├─ RSI(14):     {rsi:>12.2f}  [{rsi_status}]")
+        print(f"      ├─ SMA200:      ${sma200:>12,.2f}  (5-day slope: {slope_200:>+8.2f})")
+        print(f"      ├─ RSI(21):     {rsi:>12.2f}  [{rsi_status}]")
+        print(f"      ├─ ADX(14):     {adx if adx else 'N/A':>12}  [{adx_status}]")
         print(f"      ├─ OBV:         {obv_current:>12,.0f}")
-        print(f"      └─ OBV_SMA20:   {obv_sma20:>12,.0f}  [{obv_status}]")
+        print(f"      ├─ OBV_SMA20:   {obv_sma20:>12,.0f}  [Current: {obv_status}]")
+        print(f"      └─ OBV Trend:   {obv_trend.upper()} (5-day consistency check)")
         
         price_vs_sma50 = '>' if current_price > sma50 else '<'
-        sma50_vs_sma100 = '>' if sma50 > sma100 else '<'
-        rsi_zone = '<50' if rsi < 50 else '50-60' if 50 <= rsi <= 60 else '60-70' if 60 < rsi <= 70 else '>70'
+        price_vs_sma200 = '>' if current_price > sma200 else '<'
+        sma50_vs_sma200 = '>' if sma50 > sma200 else '<'
+        
+        # Determine price position relative to SMAs (top/middle/bottom)
+        sma_positions = [
+            ('Price', current_price),
+            ('SMA50', sma50),
+            ('SMA200', sma200)
+        ]
+        sma_positions_sorted = sorted(sma_positions, key=lambda x: x[1], reverse=True)
+        position_order = f"{sma_positions_sorted[0][0]} (top) > {sma_positions_sorted[1][0]} (middle) > {sma_positions_sorted[2][0]} (bottom)"
+        
+        # Check if price is in "no man's land" (between SMAs)
+        price_between_smas = (current_price > min(sma50, sma200) and 
+                             current_price < max(sma50, sma200))
         
         print(f"\n      CONDITION CHECKS:")
-        print(f"      ├─ Price vs SMAs:    Price({current_price:.2f}) {price_vs_sma50} SMA50({sma50:.2f}) {sma50_vs_sma100} SMA100({sma100:.2f})")
-        print(f"      ├─ SMA Slopes:       SMA50: {slope_50:+.2f}, SMA100: {slope_100:+.2f}")
-        print(f"      ├─ OBV Trend:        OBV({obv_current:,.0f}) vs SMA20({obv_sma20:,.0f}) = {obv_current - obv_sma20:+,.0f}")
-        print(f"      └─ RSI Zone:         {rsi:.2f} ({rsi_zone})")
+        print(f"      ├─ Price vs SMAs:    Price({current_price:.2f}) {price_vs_sma50} SMA50({sma50:.2f}) {sma50_vs_sma200} SMA200({sma200:.2f})")
+        print(f"      │                    Position: {position_order}")
+        if price_between_smas:
+            print(f"      │                    ⚠ Price in NO MAN'S LAND (between SMAs)")
+        print(f"      ├─ SMA Slopes:       SMA50: {slope_50:+.2f}, SMA200: {slope_200:+.2f}")
+        print(f"      ├─ OBV vs SMA20:     {obv_current - obv_sma20:+,.0f} ({obv_trend})")
+        print(f"      ├─ ADX Level:        {f'{adx:.1f}' if adx else 'N/A'} ({adx_status})")
+        print(f"      └─ RSI Level:        {rsi:.2f}")
         
-        # Apply classification rules
+        # Apply updated signal classification rules (ordered: STRONG signals first, then normal, then HOLD)
         print(f"\n      EVALUATING SIGNAL RULES:")
         
-        if (current_price > sma50 and sma50 > sma100 and 
-            slope_50 > 0 and slope_100 > 0 and 
-            obv_current > obv_sma20 and rsi < 50):
+        # STRONG BUY: Price >= SMA50 > SMA200, ADX >= 25, RSI < 45, OBV rising
+        if (current_price >= sma50 and sma50 > sma200 and 
+            adx is not None and adx >= 25 and 
+            rsi < 45 and obv_trend == 'rising'):
             signal = 'STRONG BUY'
             signal_color = 'green'
-            print(f"      STRONG BUY conditions met:")
-            print(f"         • Price > SMA50 > SMA100: YES")
-            print(f"         • Slopes positive: YES")
-            print(f"         • OBV > OBV_SMA20: YES")
-            print(f"         • RSI < 50: YES")
+            print(f"      STRONG BUY:")
+            print(f"         - Price >= SMA50 > SMA200: YES ({current_price:.2f} >= {sma50:.2f} > {sma200:.2f})")
+            print(f"         - ADX >= 25 (strong trend): YES ({adx:.1f})")
+            print(f"         - RSI < 45 (dip in uptrend): YES ({rsi:.1f})")
+            print(f"         - OBV rising trend: YES")
+            print(f"         -> Strong uptrend with pullback, BUY THE DIP")
             
-        elif (current_price > sma100 and 
-              ((sma50 > sma100) or (sma50 <= sma100 and slope_50 > 0)) and 
-              obv_current >= obv_sma20 and 50 <= rsi <= 60):
-            signal = 'BUY'
-            signal_color = 'darkgreen'
-            print(f"      BUY conditions met:")
-            print(f"         • Price > SMA100: YES")
-            print(f"         • SMA trend favorable: YES")
-            print(f"         • OBV >= avg: YES")
-            print(f"         • RSI 50-60: YES")
-            
-        elif (current_price < sma50 and sma50 < sma100 and 
-              obv_current < obv_sma20 and 30 <= rsi < 45):
-            signal = 'SELL'
-            signal_color = 'darkred'
-            print(f"      SELL conditions met:")
-            print(f"         • Price < SMA50 < SMA100: YES")
-            print(f"         • OBV declining: YES")
-            print(f"         • RSI 30-45: YES")
-            
-        elif (current_price < sma50 and current_price < sma100 and 
-              (obv_current < obv_sma20 or rsi < 30)):
+        # STRONG SELL: Price < SMA200, SMA50 < SMA200, ADX >= 25, RSI < 45, OBV falling
+        elif (current_price < sma200 and sma50 < sma200 and 
+              adx is not None and adx >= 25 and 
+              rsi < 45 and obv_trend == 'falling'):
             signal = 'STRONG SELL'
             signal_color = 'red'
-            print(f"      STRONG SELL conditions met:")
-            print(f"         • Price < Both SMAs: YES")
-            print(f"         • OBV bearish or RSI oversold: YES")
+            print(f"      STRONG SELL:")
+            print(f"         - Price < SMA200: YES ({current_price:.2f} < {sma200:.2f})")
+            print(f"         - SMA50 < SMA200 (bearish): YES ({sma50:.2f} < {sma200:.2f})")
+            print(f"         - ADX >= 25 (strong bearish trend): YES ({adx:.1f})")
+            print(f"         - RSI < 45 (momentum breakdown): YES ({rsi:.1f})")
+            print(f"         - OBV falling trend: YES")
+            print(f"         -> Long-term downtrend confirmed, EXIT COMPLETELY")
             
+        # BUY: Price >= SMA200, ADX >= 20, RSI < 55
+        elif (current_price >= sma200 and 
+              adx is not None and adx >= 20 and 
+              rsi < 55):
+            signal = 'BUY'
+            signal_color = 'darkgreen'
+            print(f"      BUY:")
+            print(f"         - Price >= SMA200: YES ({current_price:.2f} >= {sma200:.2f})")
+            print(f"         - ADX >= 20 (trend present): YES ({adx:.1f})")
+            print(f"         - RSI < 55 (not overbought): YES ({rsi:.1f})")
+            print(f"         -> Bullish trend forming")
+            
+        # SELL: Price < SMA50 < SMA200, ADX >= 20, RSI > 45
+        elif (current_price < sma50 and sma50 < sma200 and 
+              adx is not None and adx >= 20 and 
+              rsi > 45):
+            signal = 'SELL'
+            signal_color = 'darkred'
+            print(f"      SELL:")
+            print(f"         - Price < SMA50 < SMA200: YES ({current_price:.2f} < {sma50:.2f} < {sma200:.2f})")
+            print(f"         - ADX >= 20 (downtrend present): YES ({adx:.1f})")
+            print(f"         - RSI > 45 (momentum breaking down): YES ({rsi:.1f})")
+            print(f"         -> Downtrend beginning, REDUCE EXPOSURE")
+            
+        # HOLD: Multiple conditions trigger hold
         else:
-            # Hold conditions: mixed signals, flat slopes, or RSI in neutral zone
             signal = 'HOLD'
             signal_color = 'orange'
-            print(f"      HOLD conditions (mixed signals):")
-            print(f"         • No clear buy/sell pattern detected")
+            print(f"      HOLD:")
+            
+            hold_reasons = []
+            
+            # Check all HOLD conditions
+            if price_between_smas:
+                hold_reasons.append(f"Price in no man's land (between SMAs: {min(sma50, sma200):.2f} - {max(sma50, sma200):.2f})")
+            
+            if adx is not None and adx < 20:
+                hold_reasons.append(f"ADX < 20 (weak/no trend: {adx:.1f})")
+            
+            if 55 <= rsi <= 70:
+                hold_reasons.append(f"RSI 55-70 (neutral/overbought zone: {rsi:.1f})")
+            
+            if obv_trend == 'flat':
+                hold_reasons.append(f"OBV neutral/mixed (no clear direction)")
+            
+            # If no specific HOLD reason, it's just mixed signals
+            if not hold_reasons:
+                hold_reasons.append("Mixed signals - not a clear entry/exit point")
+            
+            for reason in hold_reasons:
+                print(f"         - {reason}")
+            
+            print(f"         -> Wait for clearer signal")
         
         print(f"\n      FINAL SIGNAL: {signal}")
         print(f"      {'='*60}\n")
+        
+        # Get previous close (second to last in the array)
+        previous_close = closes[-2] if len(closes) >= 2 else current_price
         
         return {
             'signal': signal,
             'signal_color': signal_color,
             'rsi': rsi,
+            'adx': adx,
+            'obv_trend': obv_trend,
             'sma50': sma50,
-            'sma100': sma100,
+            'sma200': sma200,
+            'sma_position': position_order,
             'obv': obv_current,
             'obv_sma20': obv_sma20,
-            'current_price': current_price
+            'current_price': current_price,
+            'previous_close': previous_close
         }
         
     except Exception as e:
@@ -804,57 +1104,26 @@ def fetch_top10_sp500_stocks():
             print(f"    [{idx}/{len(TOP_10_SP500)}] Processing {symbol}")
             print(f"    {'─'*60}")
             
-            # Fetch data from Alpha Vantage using requests library (more reliable on PythonAnywhere)
-            url = 'https://www.alphavantage.co/query'
-            params = {
-                'function': 'GLOBAL_QUOTE',
-                'symbol': symbol,
-                'apikey': api_key
-            }
+            # Fetch TIME_SERIES_DAILY (combines price quote + indicators in one call)
+            print(f"    Fetching time series data (includes price + indicators)...")
+            trading_signal = calculate_trading_signal(symbol, api_key)
             
-            print(f"    Step 1: Fetching current price quote...")
-            response = requests.get(url, params=params, timeout=10)
-            data = response.json()
-            
-            # Debug: Print response keys
-            print(f"    Response Keys: {list(data.keys())}")
-            
-            # Check for rate limit message and switch API key immediately
-            if 'Note' in data or 'Information' in data:
-                print(f"    WARNING: API RATE LIMIT REACHED")
-                print(f"    Message: {data.get('Note') or data.get('Information')}")
-                print(f"    Switching to backup API key and retrying...")
-                api_key = switch_api_key()
-                params['apikey'] = api_key
-                time.sleep(2)  # Brief pause before retry
-                response = requests.get(url, params=params, timeout=10)
-                data = response.json()
-                
-                # Debug: Print retry response
-                print(f"    Retry Response Keys: {list(data.keys())}")
-                
-                # If still failing after switch, skip this stock
-                if 'Note' in data or 'Information' in data:
-                    print(f"    Retry Message: {data.get('Note') or data.get('Information')}")
-                    print(f"    ERROR: Both API keys exhausted, skipping {symbol}")
-                    continue
-            
-            if 'Global Quote' in data and data['Global Quote']:
-                quote = data['Global Quote']
-                current_price = float(quote.get('05. price', 0))
-                previous_close = float(quote.get('08. previous close', 0))
-                
-                print(f"    SUCCESS: Quote received:")
-                print(f"       Current Price:   ${current_price:>10.2f}")
-                print(f"       Previous Close:  ${previous_close:>10.2f}")
+            if trading_signal:
+                # Extract price and change info from the signal response
+                current_price = trading_signal.get('current_price', 0)
+                previous_close = trading_signal.get('previous_close', 0)
                 
                 if current_price > 0 and previous_close > 0:
                     daily_change = current_price - previous_close
                     daily_change_pct = (daily_change / previous_close) * 100
                     
                     direction_text = 'UP' if daily_change >= 0 else 'DOWN'
+                    print(f"    SUCCESS: Data retrieved:")
+                    print(f"       Current Price:   ${current_price:>10.2f}")
+                    print(f"       Previous Close:  ${previous_close:>10.2f}")
                     print(f"       Daily Change:    ${daily_change:>+10.2f} ({daily_change_pct:>+6.2f}%)")
                     print(f"       Direction:       {direction_text}")
+                    print(f"       Signal:          {trading_signal['signal']}")
                     
                     stock_info = {
                         'symbol': symbol,
@@ -862,29 +1131,23 @@ def fetch_top10_sp500_stocks():
                         'change': daily_change,
                         'change_pct': daily_change_pct,
                         'direction': 'up' if daily_change >= 0 else 'down',
-                        'signal': 'N/A',
-                        'signal_color': 'gray'
+                        'signal': trading_signal['signal'],
+                        'signal_color': trading_signal['signal_color'],
+                        'rsi': trading_signal.get('rsi', 0),
+                        'adx': trading_signal.get('adx'),
+                        'obv_trend': trading_signal.get('obv_trend', 'flat'),
+                        'sma50': trading_signal.get('sma50', 0),
+                        'sma200': trading_signal.get('sma200', 0),
+                        'sma_position': trading_signal.get('sma_position', 'N/A')
                     }
-                    
-                    # Get trading signal (RSI + SMA + OBV strategy)
-                    print(f"\n    Step 2: Calculating trading indicators...")
-                    trading_signal = calculate_trading_signal(symbol, api_key)
-                    if trading_signal:
-                        stock_info['signal'] = trading_signal['signal']
-                        stock_info['signal_color'] = trading_signal['signal_color']
-                        stock_info['rsi'] = trading_signal.get('rsi', 0)
-                        print(f"    SUCCESS: Signal Generated: {trading_signal['signal']}")
-                    else:
-                        print(f"    WARNING: Could not generate trading signal (using default: N/A)")
                     
                     stocks_data.append(stock_info)
                     print(f"\n    SUCCESS: {symbol} data collected")
                     print(f"       Final: ${current_price:.2f} ({daily_change_pct:+.2f}%) - {stock_info['signal']}")
                 else:
-                    print(f"    ERROR: Invalid price data (price={current_price}, prev_close={previous_close})")
+                    print(f"    ERROR: Invalid price data from time series")
             else:
-                print(f"    ERROR: No quote data in API response")
-                print(f"    Response keys: {list(data.keys())}")
+                print(f"    WARNING: Could not fetch time series data for {symbol}")
             
             # Rate limiting: Wait 15 seconds between stocks to avoid rate limit
             if idx < len(TOP_10_SP500):
@@ -960,7 +1223,7 @@ def generate_mock_top10_data():
 def fetch_crypto_data():
     """
     Fetch Bitcoin and Ethereum data with trading indicators
-    Uses Alpha Vantage DIGITAL_CURRENCY_DAILY endpoint
+    Uses calculate_trading_signal() just like stocks
     Returns list of crypto data with signals
     """
     print("  Fetching Cryptocurrency data (BTC & ETH)...")
@@ -979,104 +1242,53 @@ def fetch_crypto_data():
     for idx, crypto in enumerate(cryptos, 1):
         try:
             symbol = crypto['symbol']
-            print(f"    Fetching {crypto['name']} ({symbol})...")
+            print(f"\n    {'─'*60}")
+            print(f"    [{idx}/{len(cryptos)}] Processing {crypto['name']} ({symbol})")
+            print(f"    {'─'*60}")
             
-            # Fetch current price using DIGITAL_CURRENCY_DAILY
-            url = 'https://www.alphavantage.co/query'
-            params = {
-                'function': 'DIGITAL_CURRENCY_DAILY',
-                'symbol': symbol,
-                'market': 'USD',
-                'apikey': api_key
-            }
+            # Use the same calculate_trading_signal function as stocks
+            print(f"    Fetching time series data (includes price + indicators)...")
+            trading_signal = calculate_trading_signal(symbol, api_key, is_crypto=True)
             
-            response = requests.get(url, params=params, timeout=10)
-            data = response.json()
-            
-            # Debug: Print response
-            print(f"    Response Keys: {list(data.keys())}")
-            if 'Note' in data:
-                print(f"    Response Note: {data['Note']}")
-            if 'Information' in data:
-                print(f"    Response Information: {data['Information']}")
-            
-            # Check for rate limit and retry with backup key
-            if 'Note' in data or 'Information' in data:
-                print(f"    WARNING: {symbol}: API rate limit reached, switching key...")
-                api_key = switch_api_key()
-                params['apikey'] = api_key
-                time.sleep(2)
-                response = requests.get(url, params=params, timeout=10)
-                data = response.json()
+            if trading_signal:
+                # Extract price and change info from the signal response
+                current_price = trading_signal.get('current_price', 0)
+                previous_close = trading_signal.get('previous_close', 0)
                 
-                # Debug: Print retry response
-                print(f"    Retry Response Keys: {list(data.keys())}")
-                
-                # If still failing, skip this crypto
-                if 'Note' in data or 'Information' in data:
-                    print(f"    Retry Message: {data.get('Note') or data.get('Information')}")
-                    print(f"    ERROR: {symbol}: Both API keys exhausted, skipping")
-                    continue
-            
-            if 'Time Series (Digital Currency Daily)' in data:
-                time_series = data['Time Series (Digital Currency Daily)']
-                
-                # Get most recent date
-                latest_date = sorted(time_series.keys(), reverse=True)[0]
-                latest = time_series[latest_date]
-                
-                # Get previous day for change calculation
-                dates_sorted = sorted(time_series.keys(), reverse=True)
-                if len(dates_sorted) >= 2:
-                    prev_date = dates_sorted[1]
-                    prev = time_series[prev_date]
+                if current_price > 0 and previous_close > 0:
+                    daily_change = current_price - previous_close
+                    daily_change_pct = (daily_change / previous_close) * 100
                     
-                    # Digital currency data returns base values (not USD)
-                    # Keys are: '1. open', '2. high', '3. low', '4. close', '5. volume'
-                    # We need to fetch from USD market, not EUR
-                    current_price = float(latest['4. close'])
-                    previous_close = float(prev['4. close'])
+                    direction_text = 'UP' if daily_change >= 0 else 'DOWN'
+                    print(f"    SUCCESS: Data retrieved:")
+                    print(f"       Current Price:   ${current_price:>10.2f}")
+                    print(f"       Previous Close:  ${previous_close:>10.2f}")
+                    print(f"       Daily Change:    ${daily_change:>+10.2f} ({daily_change_pct:>+6.2f}%)")
+                    print(f"       Direction:       {direction_text}")
+                    print(f"       Signal:          {trading_signal['signal']}")
                     
-                    if current_price > 0 and previous_close > 0:
-                        daily_change = current_price - previous_close
-                        daily_change_pct = (daily_change / previous_close) * 100
-                        
-                        crypto_info = {
-                            'symbol': symbol,
-                            'name': crypto['name'],
-                            'price': current_price,
-                            'change': daily_change,
-                            'change_pct': daily_change_pct,
-                            'direction': 'up' if daily_change >= 0 else 'down',
-                            'signal': 'N/A',
-                            'signal_color': 'gray',
-                            'rsi': None
-                        }
-                        
-                        # Get trading signal using standard RSI + SMA strategy
-                        # For crypto, we can use stock ticker equivalents: BTC-USD, ETH-USD work with Alpha Vantage indicators
-                        print(f"      Fetching trading indicators for {symbol}...")
-                        crypto_ticker = f"{symbol}-USD"  # Convert BTC -> BTC-USD for technical indicators
-                        trading_signal = calculate_trading_signal(crypto_ticker, api_key)
-                        if trading_signal:
-                            crypto_info['signal'] = trading_signal['signal']
-                            crypto_info['signal_color'] = trading_signal['signal_color']
-                            crypto_info['rsi'] = trading_signal.get('rsi', 0)
-                            print(f"      Trading Signal: {trading_signal['signal']}")
-                        else:
-                            # Fallback if technical indicators don't work
-                            crypto_info['signal'] = 'HOLD'
-                            crypto_info['signal_color'] = 'orange'
-                            print(f"      Could not fetch technical indicators, defaulting to HOLD")
-                        
-                        crypto_data.append(crypto_info)
-                        print(f"    SUCCESS: {symbol}: ${current_price:,.2f} ({daily_change_pct:+.2f}%)")
-                    else:
-                        print(f"    WARNING: {symbol}: Invalid price data")
+                    crypto_info = {
+                        'symbol': symbol,
+                        'name': crypto['name'],
+                        'price': current_price,
+                        'change': daily_change,
+                        'change_pct': daily_change_pct,
+                        'direction': 'up' if daily_change >= 0 else 'down',
+                        'signal': trading_signal['signal'],
+                        'signal_color': trading_signal['signal_color'],
+                        'rsi': trading_signal.get('rsi'),
+                        'adx': trading_signal.get('adx'),
+                        'obv_trend': trading_signal.get('obv_trend', 'flat'),
+                        'sma50': trading_signal.get('sma50', 0),
+                        'sma200': trading_signal.get('sma200', 0),
+                        'sma_position': trading_signal.get('sma_position', 'N/A')
+                    }
+                    
+                    crypto_data.append(crypto_info)
                 else:
-                    print(f"    WARNING: {symbol}: Not enough historical data")
+                    print(f"    WARNING: {symbol}: Invalid price data returned")
             else:
-                print(f"    WARNING: {symbol}: No data returned from API")
+                print(f"    WARNING: {symbol}: No trading signal calculated")
             
             # Rate limiting: Wait 15 seconds between cryptos
             if idx < len(cryptos):
@@ -1121,6 +1333,19 @@ def generate_mock_crypto_data():
         daily_change = crypto['base_price'] * (daily_change_pct / 100)
         signal = np.random.choice(signals)
         rsi = np.random.uniform(25, 75)
+        adx = np.random.uniform(15, 35)
+        obv_trend = np.random.choice(['rising', 'falling', 'flat'])
+        sma50 = crypto['base_price'] * np.random.uniform(0.95, 1.05)
+        sma200 = crypto['base_price'] * np.random.uniform(0.90, 1.10)
+        
+        # Determine position order
+        positions = [
+            ('Price', crypto['base_price']),
+            ('SMA50', sma50),
+            ('SMA200', sma200)
+        ]
+        positions_sorted = sorted(positions, key=lambda x: x[1], reverse=True)
+        position_order = f"{positions_sorted[0][0]} (top) > {positions_sorted[1][0]} (middle) > {positions_sorted[2][0]} (bottom)"
         
         crypto_data.append({
             'symbol': crypto['symbol'],
@@ -1131,7 +1356,12 @@ def generate_mock_crypto_data():
             'direction': 'up' if daily_change >= 0 else 'down',
             'signal': signal,
             'signal_color': signal_colors[signal],
-            'rsi': rsi
+            'rsi': rsi,
+            'adx': adx,
+            'obv_trend': obv_trend,
+            'sma50': sma50,
+            'sma200': sma200,
+            'sma_position': position_order
         })
     
     return crypto_data
