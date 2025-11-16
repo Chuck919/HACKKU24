@@ -104,19 +104,118 @@ def fetch_insider_transactions(symbols_list):
     
     return insider_data
 
+def calculate_composite_sentiment(news_items, target_ticker=None):
+    """
+    Calculate composite sentiment score from news items
+    
+    Uses SIMPLE AVERAGE (not weighted) of sentiment scores because
+    Alpha Vantage thresholds are designed for raw sentiment values.
+    Relevance is used only for FILTERING (include articles with relevance > 0.1)
+    
+    Returns dict with:
+        - composite_score: Simple average sentiment (-1 to 1)
+        - composite_label: Bearish/Somewhat-Bearish/Neutral/Somewhat-Bullish/Bullish
+        - article_count: Number of articles analyzed
+        - avg_relevance: Average relevance of articles (for reference)
+    """
+    if not news_items:
+        return {
+            'composite_score': 0,
+            'composite_label': 'Neutral',
+            'article_count': 0,
+            'avg_relevance': 0
+        }
+    
+    sentiment_scores = []
+    relevances = []
+    
+    for item in news_items:
+        # Get overall sentiment for the article
+        sentiment_score = item.get('overall_sentiment_score', 0)
+        relevance = 0.5  # Default relevance
+        
+        # If filtering by ticker, use ticker-specific sentiment and relevance
+        if target_ticker and 'ticker_sentiment' in item:
+            ticker_found = False
+            for ts in item['ticker_sentiment']:
+                # Match ticker exactly (including CRYPTO: prefix for crypto)
+                if ts.get('ticker', '') == target_ticker:
+                    sentiment_score = float(ts.get('ticker_sentiment_score', sentiment_score))
+                    relevance = float(ts.get('relevance_score', 0.5))
+                    ticker_found = True
+                    break
+            
+            if not ticker_found:
+                continue  # Skip articles that don't mention the target ticker
+        else:
+            # Use overall article relevance (average of topic relevances)
+            if 'topics' in item and item['topics']:
+                relevance = sum(float(t.get('relevance_score', 0)) for t in item['topics']) / len(item['topics'])
+        
+        # Only include articles with meaningful relevance (> 0.1)
+        if relevance > 0.1:
+            sentiment_scores.append(sentiment_score)
+            relevances.append(relevance)
+    
+    if not sentiment_scores:
+        return {
+            'composite_score': 0,
+            'composite_label': 'Neutral',
+            'article_count': 0,
+            'avg_relevance': 0
+        }
+    
+    # Calculate SIMPLE AVERAGE (not weighted)
+    # This preserves the Alpha Vantage threshold scale
+    composite_score = sum(sentiment_scores) / len(sentiment_scores)
+    avg_relevance = sum(relevances) / len(relevances)
+    
+    # Determine label based on Alpha Vantage's scale
+    if composite_score <= -0.35:
+        label = 'Bearish'
+    elif composite_score <= -0.15:
+        label = 'Somewhat-Bearish'
+    elif composite_score < 0.15:
+        label = 'Neutral'
+    elif composite_score < 0.35:
+        label = 'Somewhat-Bullish'
+    else:
+        label = 'Bullish'
+    
+    return {
+        'composite_score': round(composite_score, 4),
+        'composite_label': label,
+        'article_count': len(sentiment_scores),
+        'avg_relevance': round(avg_relevance, 4)
+    }
+
+
 def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
     """
-    Fetch market news with sentiment analysis
-    NOTE: Alpha Vantage NEWS_SENTIMENT only supports ONE ticker at a time
-    We'll make separate calls for each ticker and combine results
+    Fetch market news with sentiment analysis from Alpha Vantage
+    
+    NOTE: Alpha Vantage NEWS_SENTIMENT supports:
+    - ONE ticker at a time (use tickers=['AAPL', 'MSFT'] for individual stocks)
+    - MULTIPLE topics at once (use topics=['financial_markets', 'technology'])
+    - For crypto, use CRYPTO: prefix (e.g., 'CRYPTO:BTC')
+    - Topics work better for broad market coverage than ETF tickers
+    
+    Args:
+        topics: List of topic strings (e.g., ['financial_markets', 'technology'])
+        tickers: List of ticker symbols (e.g., ['AAPL', 'MSFT', 'CRYPTO:BTC'])
+        limit: Number of articles per ticker/topic
+        
+    Returns:
+        Dict with sentiment analysis and composite scores
     """
     print(f"  Fetching market news & sentiment...")
+    print(f"    Topics: {topics}")
     print(f"    Tickers: {tickers}")
-    print(f"    Limit per ticker: {limit}")
+    print(f"    Limit per query: {limit}")
     
     if not get_api_key():
         print("    WARNING: No Alpha Vantage API key configured")
-        return []
+        return None
     
     all_news_items = []
     seen_urls = set()  # Track URLs to avoid duplicates
@@ -173,24 +272,22 @@ def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
                             continue
                         seen_urls.add(url)
                         
-                        # Get ticker sentiments
-                        ticker_sentiments = {}
-                        if 'ticker_sentiment' in item:
-                            for ts in item['ticker_sentiment'][:3]:  # Top 3 tickers mentioned
-                                ticker_sentiments[ts.get('ticker', 'N/A')] = {
-                                    'relevance': float(ts.get('relevance_score', 0)),
-                                    'sentiment': ts.get('ticker_sentiment_label', 'Neutral')
-                                }
-                        
+                        # Store the raw item WITH all fields for composite sentiment calculation
+                        # But also add display-friendly fields for the email template
                         all_news_items.append({
+                            # Raw API fields (needed for calculate_composite_sentiment)
+                            'overall_sentiment_score': float(item.get('overall_sentiment_score', 0)),
+                            'ticker_sentiment': item.get('ticker_sentiment', []),
+                            'topics': item.get('topics', []),
+                            
+                            # Display fields (for email template)
                             'title': item.get('title', 'No title'),
                             'url': url,
                             'time_published': item.get('time_published', 'N/A'),
                             'source': item.get('source', 'Unknown'),
                             'summary': item.get('summary', 'No summary')[:200] + '...',
                             'overall_sentiment': item.get('overall_sentiment_label', 'Neutral'),
-                            'sentiment_score': float(item.get('overall_sentiment_score', 0)),
-                            'ticker_sentiments': ticker_sentiments
+                            'sentiment_score': float(item.get('overall_sentiment_score', 0))
                         })
                 else:
                     print(f"       WARNING: No feed data for {ticker}")
@@ -198,8 +295,65 @@ def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
                 # Brief pause between ticker requests
                 if idx < len(tickers):
                     time.sleep(1)
-        else:
-            # No specific tickers, get general market news
+        
+        # Fetch by topics if provided (better for broad market coverage)
+        if topics:
+            # Can pass multiple topics in one request
+            topics_str = ','.join(topics)
+            print(f"\n    Fetching news for topics: {topics_str}...")
+            
+            params = {
+                'function': 'NEWS_SENTIMENT',
+                'apikey': api_key,
+                'topics': topics_str,
+                'sort': 'LATEST',
+                'limit': str(limit * len(topics))
+            }
+            
+            response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
+            print(f"       Response status: {response.status_code}")
+            
+            data = response.json()
+            print(f"       Response keys: {list(data.keys())}")
+            
+            # Check for rate limiting
+            if 'Note' in data or ('Information' in data and 'rate limit' in data.get('Information', '').lower()):
+                print(f"       RATE LIMIT: {data.get('Note') or data.get('Information')}")
+                api_key = switch_api_key()
+                params['apikey'] = api_key
+                time.sleep(2)
+                response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
+                data = response.json()
+            
+            if 'feed' in data:
+                print(f"       Feed contains {len(data['feed'])} items")
+                for item in data['feed']:
+                    url = item.get('url', '')
+                    if url in seen_urls:
+                        continue
+                    seen_urls.add(url)
+                    
+                    # Store the raw item WITH all fields for composite sentiment calculation
+                    all_news_items.append({
+                        # Raw API fields (needed for calculate_composite_sentiment)
+                        'overall_sentiment_score': float(item.get('overall_sentiment_score', 0)),
+                        'ticker_sentiment': item.get('ticker_sentiment', []),
+                        'topics': item.get('topics', []),
+                        
+                        # Display fields (for email template)
+                        'title': item.get('title', 'No title'),
+                        'url': url,
+                        'time_published': item.get('time_published', 'N/A'),
+                        'source': item.get('source', 'Unknown'),
+                        'summary': item.get('summary', 'No summary')[:200] + '...',
+                        'overall_sentiment': item.get('overall_sentiment_label', 'Neutral'),
+                        'sentiment_score': float(item.get('overall_sentiment_score', 0))
+                    })
+            else:
+                print(f"       WARNING: No feed data for topics")
+        
+        # If no tickers or topics, get general market news
+        if not tickers and not topics:
             print(f"    Fetching general market news...")
             params = {
                 'function': 'NEWS_SENTIMENT',
@@ -222,31 +376,51 @@ def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
             
             if 'feed' in data:
                 for item in data['feed'][:limit]:
-                    ticker_sentiments = {}
-                    if 'ticker_sentiment' in item:
-                        for ts in item['ticker_sentiment'][:3]:
-                            ticker_sentiments[ts.get('ticker', 'N/A')] = {
-                                'relevance': float(ts.get('relevance_score', 0)),
-                                'sentiment': ts.get('ticker_sentiment_label', 'Neutral')
-                            }
-                    
+                    # Store the raw item WITH all fields for composite sentiment calculation
                     all_news_items.append({
+                        # Raw API fields (needed for calculate_composite_sentiment)
+                        'overall_sentiment_score': float(item.get('overall_sentiment_score', 0)),
+                        'ticker_sentiment': item.get('ticker_sentiment', []),
+                        'topics': item.get('topics', []),
+                        
+                        # Display fields (for email template)
                         'title': item.get('title', 'No title'),
                         'url': item.get('url', '#'),
                         'time_published': item.get('time_published', 'N/A'),
                         'source': item.get('source', 'Unknown'),
                         'summary': item.get('summary', 'No summary')[:200] + '...',
                         'overall_sentiment': item.get('overall_sentiment_label', 'Neutral'),
-                        'sentiment_score': float(item.get('overall_sentiment_score', 0)),
-                        'ticker_sentiments': ticker_sentiments
+                        'sentiment_score': float(item.get('overall_sentiment_score', 0))
                     })
         
         if all_news_items:
             print(f"\n    SUCCESS: Retrieved {len(all_news_items)} unique news articles")
-            return all_news_items[:limit]  # Limit total results
+            
+            # Calculate composite sentiment scores
+            print(f"\n    Calculating composite sentiment...")
+            
+            # Overall market sentiment (all articles)
+            market_sentiment = calculate_composite_sentiment(all_news_items)
+            print(f"      Market Sentiment: {market_sentiment['composite_label']} ({market_sentiment['composite_score']:.3f})")
+            print(f"      Based on {market_sentiment['article_count']} articles, avg relevance: {market_sentiment['avg_relevance']:.3f}")
+            
+            # Ticker-specific sentiments
+            ticker_sentiments = {}
+            if tickers:
+                for ticker in tickers:
+                    ticker_sentiment = calculate_composite_sentiment(all_news_items, target_ticker=ticker)
+                    if ticker_sentiment['article_count'] > 0:
+                        ticker_sentiments[ticker] = ticker_sentiment
+                        print(f"      {ticker}: {ticker_sentiment['composite_label']} ({ticker_sentiment['composite_score']:.3f}) - {ticker_sentiment['article_count']} articles")
+            
+            return {
+                'articles': all_news_items[:limit],  # Limit total results
+                'market_sentiment': market_sentiment,
+                'ticker_sentiments': ticker_sentiments
+            }
         else:
             print(f"    WARNING: No news items retrieved")
-            return []
+            return None
         
     except requests.exceptions.RequestException as e:
         print(f"    ERROR: Request failed: {str(e)[:100]}")
@@ -896,18 +1070,20 @@ def calculate_trading_signal(symbol, api_key, is_crypto=False):
             return None
         
         # Calculate slopes (5-day lookback)
-        # We need to calculate the SMA values from 5 days ago using data up to that point
-        if len(closes) >= 205:  # Need at least 205 days for SMA200 from 5 days ago
-            # Calculate SMA50 and SMA200 from 5 days ago (using data up to index -5)
-            closes_5days_ago = closes[:-5]
-            sma50_5days_ago = np.mean(closes_5days_ago[-50:]) if len(closes_5days_ago) >= 50 else sma50
-            sma200_5days_ago = np.mean(closes_5days_ago[-200:]) if len(closes_5days_ago) >= 200 else sma200
-        elif len(closes) >= 55:  # Can calculate SMA50 from 5 days ago but not SMA200
-            closes_5days_ago = closes[:-5]
-            sma50_5days_ago = np.mean(closes_5days_ago[-50:])
-            sma200_5days_ago = sma200  # Not enough data, use current
+        # We need historical SMA values to calculate slope properly
+        # For SMA200, we need 200 candles for current + 5 more for lookback = 205 total
+        if len(closes) >= 205:
+            # We have enough data for both SMAs
+            # Calculate what SMA values were 5 days ago
+            sma50_5days_ago = np.mean(closes[-55:-5])  # SMA50 from 5 days ago
+            sma200_5days_ago = np.mean(closes[-205:-5])  # SMA200 from 5 days ago
+        elif len(closes) >= 55:
+            # Can calculate SMA50 slope but not SMA200
+            sma50_5days_ago = np.mean(closes[-55:-5])
+            sma200_5days_ago = sma200  # Not enough data, slope will be 0
         else:
-            sma50_5days_ago = sma50  # Not enough data, use current
+            # Not enough data for either slope
+            sma50_5days_ago = sma50
             sma200_5days_ago = sma200
         
         slope_50 = sma50 - sma50_5days_ago
@@ -1584,10 +1760,12 @@ if __name__ == '__main__':
                     # Get market news sentiment if user wants it
                     user_market_news = None
                     if include_news_sentiment:
-                        # Track S&P 500, NASDAQ, and Bitcoin
+                        # Use topics for better broad market coverage
+                        # Topics: financial_markets, technology
                         user_market_news = fetch_market_news_sentiment(
-                            tickers=['SPY', 'QQQ', 'BTC'],  # S&P 500, NASDAQ, and Bitcoin
-                            limit=10
+                            topics=['financial_markets', 'technology'],
+                            tickers=['CRYPTO:BTC'],  # Add Bitcoin for crypto coverage
+                            limit=50  # Get 50 articles for accurate composite sentiment
                         )
                     
                     print(f"  Attempting to send email to {email}...")

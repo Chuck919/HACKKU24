@@ -34,24 +34,76 @@
         /* Mobile optimization */
         @media only screen and (max-width: 600px) {
             body {
-                padding: 10px;
+                padding: 5px;
                 max-width: 100%;
+            }
+            h1 {
+                font-size: 20px;
+                margin: 10px 0;
+            }
+            h2 {
+                font-size: 16px;
+                margin: 12px 0 8px 0;
+            }
+            h3 {
+                font-size: 14px;
+                margin: 8px 0 6px 0;
+            }
+            p {
+                font-size: 13px;
+                line-height: 1.4;
             }
             .chart-section {
-                padding: 10px;
-                margin: 15px 0;
+                padding: 8px;
+                margin: 10px 0;
+            }
+            .chart-section p {
+                font-size: 12px;
             }
             .chart-image {
-                margin: 10px 0;
+                margin: 8px 0;
                 max-width: 100%;
                 width: 100%;
+                height: auto;
             }
             .stocks-table {
-                font-size: 12px;
+                font-size: 11px;
             }
             .stocks-table th,
             .stocks-table td {
-                padding: 8px 4px;
+                padding: 6px 3px;
+                font-size: 11px;
+            }
+            .news-section {
+                padding: 8px;
+                margin: 10px 0;
+            }
+            .news-card {
+                padding: 8px;
+                margin: 8px 0;
+            }
+            .news-card h3 {
+                font-size: 13px;
+            }
+            .news-card p {
+                font-size: 11px;
+            }
+            .sentiment-badge {
+                font-size: 10px;
+                padding: 2px 6px;
+            }
+            .ticker-tag {
+                font-size: 9px;
+                padding: 2px 6px;
+            }
+            .insider-section {
+                padding: 8px;
+                margin: 10px 0;
+            }
+            .insider-table th,
+            .insider-table td {
+                padding: 6px 3px;
+                font-size: 11px;
             }
         }
         .stocks-table {
@@ -403,10 +455,44 @@
 
     {% if market_news %}
     <div class="news-section">
-        <h2 style="color: #007bff;">Market News & Sentiment (S&P 500, NASDAQ & Bitcoin)</h2>
-        <p style="color: #666;">Latest market news with AI-powered sentiment analysis for major market indices and Bitcoin:</p>
+        <h2 style="color: #007bff;">Market Sentiment Analysis</h2>
         
-        {% for news_item in market_news %}
+        <!-- Composite Sentiment Summary -->
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid {% if market_news.market_sentiment.composite_label == 'Bullish' or market_news.market_sentiment.composite_label == 'Somewhat-Bullish' %}#26a69a{% elif market_news.market_sentiment.composite_label == 'Bearish' or market_news.market_sentiment.composite_label == 'Somewhat-Bearish' %}#ef5350{% else %}#ffa726{% endif %};">
+            <h3 style="margin-top: 0; color: #333;">Overall Market Sentiment</h3>
+            <p style="margin: 8px 0;">
+                <strong style="font-size: 18px; color: {% if market_news.market_sentiment.composite_label == 'Bullish' or market_news.market_sentiment.composite_label == 'Somewhat-Bullish' %}#26a69a{% elif market_news.market_sentiment.composite_label == 'Bearish' or market_news.market_sentiment.composite_label == 'Somewhat-Bearish' %}#ef5350{% else %}#ffa726{% endif %};">
+                    {{ market_news.market_sentiment.composite_label }}
+                </strong>
+                <span style="color: #666; font-size: 14px;">(Score: {{ "%.3f"|format(market_news.market_sentiment.composite_score) }})</span>
+            </p>
+            <p style="color: #666; font-size: 13px; margin: 5px 0;">
+                Based on {{ market_news.market_sentiment.article_count }} articles | 
+                Avg Relevance: {{ "%.1f"|format(market_news.market_sentiment.avg_relevance * 100) }}%
+            </p>
+            
+            {% if market_news.ticker_sentiments %}
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd;">
+                <strong style="font-size: 14px;">Ticker-Specific Sentiment:</strong>
+                <div style="margin-top: 8px;">
+                    {% for ticker, sentiment in market_news.ticker_sentiments.items() %}
+                    <div style="display: inline-block; margin: 4px 8px 4px 0; padding: 6px 12px; background: white; border-radius: 4px; border: 1px solid #ddd;">
+                        <strong style="color: #007bff;">{{ ticker }}:</strong>
+                        <span style="color: {% if sentiment.composite_label == 'Bullish' or sentiment.composite_label == 'Somewhat-Bullish' %}#26a69a{% elif sentiment.composite_label == 'Bearish' or sentiment.composite_label == 'Somewhat-Bearish' %}#ef5350{% else %}#666{% endif %}; font-weight: bold;">
+                            {{ sentiment.composite_label }}
+                        </span>
+                        <span style="color: #999; font-size: 12px;">({{ sentiment.article_count }} articles)</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <h3 style="color: #333; margin-top: 20px;">Recent Market News Articles</h3>
+        <p style="color: #666; font-size: 13px;">Latest news with AI-powered sentiment analysis:</p>
+        
+        {% for news_item in market_news.articles %}
         <div class="news-card {% if news_item.overall_sentiment == 'Bullish' or news_item.overall_sentiment == 'Somewhat-Bullish' %}sentiment-positive{% elif news_item.overall_sentiment == 'Bearish' or news_item.overall_sentiment == 'Somewhat-Bearish' %}sentiment-negative{% else %}sentiment-neutral{% endif %}">
             <h3 style="color: #333; margin-top: 0;">
                 {{ news_item.title }}
@@ -420,11 +506,11 @@
             </p>
             <p style="color: #333;">{{ news_item.summary }}</p>
             
-            {% if news_item.ticker_sentiments %}
+            {% if news_item.ticker_sentiment %}
             <div class="ticker-tags">
-                <strong style="font-size: 13px;">Index Sentiment:</strong>
-                {% for ticker, sentiment_data in news_item.ticker_sentiments.items() %}
-                <span class="ticker-tag">{{ ticker }} ({{ sentiment_data.sentiment }})</span>
+                <strong style="font-size: 13px;">Mentioned Tickers:</strong>
+                {% for ts in news_item.ticker_sentiment[:3] %}
+                <span class="ticker-tag">{{ ts.ticker }} ({{ ts.ticker_sentiment_label }})</span>
                 {% endfor %}
             </div>
             {% endif %}
