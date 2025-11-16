@@ -298,59 +298,70 @@ def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
         
         # Fetch by topics if provided (better for broad market coverage)
         if topics:
-            # Can pass multiple topics in one request
-            topics_str = ','.join(topics)
-            print(f"\n    Fetching news for topics: {topics_str}...")
-            
-            params = {
-                'function': 'NEWS_SENTIMENT',
-                'apikey': api_key,
-                'topics': topics_str,
-                'sort': 'LATEST',
-                'limit': str(limit * len(topics))
-            }
-            
-            response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
-            print(f"       Response status: {response.status_code}")
-            
-            data = response.json()
-            print(f"       Response keys: {list(data.keys())}")
-            
-            # Check for rate limiting
-            if 'Note' in data or ('Information' in data and 'rate limit' in data.get('Information', '').lower()):
-                print(f"       RATE LIMIT: {data.get('Note') or data.get('Information')}")
-                api_key = switch_api_key()
-                params['apikey'] = api_key
-                time.sleep(2)
+            # Make separate API call for each topic
+            for topic_idx, topic in enumerate(topics, 1):
+                print(f"\n    [{topic_idx}/{len(topics)}] Fetching news for topic: {topic}...")
+                
+                params = {
+                    'function': 'NEWS_SENTIMENT',
+                    'apikey': api_key,
+                    'topics': topic,  # Single topic only
+                    'sort': 'LATEST',
+                    'limit': str(limit)
+                }
+                
                 response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
+                print(f"       Response status: {response.status_code}")
+                
                 data = response.json()
-            
-            if 'feed' in data:
-                print(f"       Feed contains {len(data['feed'])} items")
-                for item in data['feed']:
-                    url = item.get('url', '')
-                    if url in seen_urls:
-                        continue
-                    seen_urls.add(url)
+                print(f"       Response keys: {list(data.keys())}")
+                
+                # Check for rate limiting
+                if 'Note' in data or ('Information' in data and 'rate limit' in data.get('Information', '').lower()):
+                    print(f"       RATE LIMIT: {data.get('Note') or data.get('Information')}")
+                    print(f"       Switching to backup API key...")
+                    api_key = switch_api_key()
+                    params['apikey'] = api_key
+                    time.sleep(2)
+                    response = requests.get('https://www.alphavantage.co/query', params=params, timeout=10)
+                    data = response.json()
+                    print(f"       Retry Response keys: {list(data.keys())}")
                     
-                    # Store the raw item WITH all fields for composite sentiment calculation
-                    all_news_items.append({
-                        # Raw API fields (needed for calculate_composite_sentiment)
-                        'overall_sentiment_score': float(item.get('overall_sentiment_score', 0)),
-                        'ticker_sentiment': item.get('ticker_sentiment', []),
-                        'topics': item.get('topics', []),
+                    # If still failing after switch, skip this topic
+                    if 'Note' in data or 'Information' in data:
+                        print(f"       WARNING: Both API keys exhausted, skipping {topic}")
+                        continue
+                
+                if 'feed' in data:
+                    print(f"       Feed contains {len(data['feed'])} items")
+                    for item in data['feed']:
+                        url = item.get('url', '')
+                        if url in seen_urls:
+                            continue
+                        seen_urls.add(url)
                         
-                        # Display fields (for email template)
-                        'title': item.get('title', 'No title'),
-                        'url': url,
-                        'time_published': item.get('time_published', 'N/A'),
-                        'source': item.get('source', 'Unknown'),
-                        'summary': item.get('summary', 'No summary')[:200] + '...',
-                        'overall_sentiment': item.get('overall_sentiment_label', 'Neutral'),
-                        'sentiment_score': float(item.get('overall_sentiment_score', 0))
-                    })
-            else:
-                print(f"       WARNING: No feed data for topics")
+                        # Store the raw item WITH all fields for composite sentiment calculation
+                        all_news_items.append({
+                            # Raw API fields (needed for calculate_composite_sentiment)
+                            'overall_sentiment_score': float(item.get('overall_sentiment_score', 0)),
+                            'ticker_sentiment': item.get('ticker_sentiment', []),
+                            'topics': item.get('topics', []),
+                            
+                            # Display fields (for email template)
+                            'title': item.get('title', 'No title'),
+                            'url': url,
+                            'time_published': item.get('time_published', 'N/A'),
+                            'source': item.get('source', 'Unknown'),
+                            'summary': item.get('summary', 'No summary')[:200] + '...',
+                            'overall_sentiment': item.get('overall_sentiment_label', 'Neutral'),
+                            'sentiment_score': float(item.get('overall_sentiment_score', 0))
+                        })
+                else:
+                    print(f"       WARNING: No feed data for {topic}")
+                
+                # Brief pause between topic requests
+                if topic_idx < len(topics):
+                    time.sleep(1)
         
         # If no tickers or topics, get general market news
         if not tickers and not topics:
