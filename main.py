@@ -425,7 +425,7 @@ def fetch_market_news_sentiment(topics=None, tickers=None, limit=10):
                         print(f"      {ticker}: {ticker_sentiment['composite_label']} ({ticker_sentiment['composite_score']:.3f}) - {ticker_sentiment['article_count']} articles")
             
             return {
-                'articles': all_news_items[:limit],  # Limit total results
+                'articles': all_news_items[:3],  # Show only top 3 articles in email
                 'market_sentiment': market_sentiment,
                 'ticker_sentiments': ticker_sentiments
             }

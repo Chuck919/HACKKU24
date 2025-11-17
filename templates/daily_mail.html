@@ -490,9 +490,9 @@
         </div>
         
         <h3 style="color: #333; margin-top: 20px;">Recent Market News Articles</h3>
-        <p style="color: #666; font-size: 13px;">Latest news with AI-powered sentiment analysis:</p>
+        <p style="color: #666; font-size: 13px;">Latest news with AI-powered sentiment analysis (showing top 3 articles):</p>
         
-        {% for news_item in market_news.articles %}
+        {% for news_item in market_news.articles[:3] %}
         <div class="news-card {% if news_item.overall_sentiment == 'Bullish' or news_item.overall_sentiment == 'Somewhat-Bullish' %}sentiment-positive{% elif news_item.overall_sentiment == 'Bearish' or news_item.overall_sentiment == 'Somewhat-Bearish' %}sentiment-negative{% else %}sentiment-neutral{% endif %}">
             <h3 style="color: #333; margin-top: 0;">
                 {{ news_item.title }}
